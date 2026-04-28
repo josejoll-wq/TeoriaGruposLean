@@ -1240,8 +1240,8 @@ theorem hom_inyectivo_de_grupo_simple {G G'} [Grupo G] [Grupo G'] (f : G → G')
   | inr h_total => contradiction
 
 
--- creamos una instancia local para que Lean reconozca que G/Ker(f) es un Grupo.
-local instance GrupoCocienteKer {G G'} [Grupo G] [Grupo G'] (f : G → G') (hf : EsHomomorfismo f) :
+-- creamos una instancia para que Lean reconozca que G/Ker(f) es un Grupo.
+instance GrupoCocienteKer {G G'} [Grupo G] [Grupo G'] (f : G → G') (hf : EsHomomorfismo f) :
   Grupo (Quotient (setoidDcha (Ker f hf))) := GrupoCociente (Ker f hf) (ker_es_normal f hf)
 
 -- Definimos la función inducida f_barra : G/Ker(f) → Im(f)
