@@ -3,7 +3,11 @@
 import Mathlib.Data.Fintype.Prod
 import Mathlib.Data.Fintype.Card
 import Mathlib.Data.Fintype.Quotient
-
+import Mathlib.Data.Fintype.BigOperators
+import Mathlib.Data.Nat.Prime.Basic
+import Mathlib.Data.Nat.Prime.Factorial
+import Mathlib.Data.Fintype.Perm
+import Mathlib.Data.Nat.ModEq
 
 /- Definimos lo que es un grupo-/
 class Grupo (G : Type _) extends Mul G, One G, Inv G where
@@ -1240,8 +1244,8 @@ theorem hom_inyectivo_de_grupo_simple {G G'} [Grupo G] [Grupo G'] (f : G → G')
   | inr h_total => contradiction
 
 
--- creamos una instancia para que Lean reconozca que G/Ker(f) es un Grupo.
-instance GrupoCocienteKer {G G'} [Grupo G] [Grupo G'] (f : G → G') (hf : EsHomomorfismo f) :
+-- creamos una instancia local para que Lean reconozca que G/Ker(f) es un Grupo.
+local instance GrupoCocienteKer {G G'} [Grupo G] [Grupo G'] (f : G → G') (hf : EsHomomorfismo f) :
   Grupo (Quotient (setoidDcha (Ker f hf))) := GrupoCociente (Ker f hf) (ker_es_normal f hf)
 
 -- Definimos la función inducida f_barra : G/Ker(f) → Im(f)
@@ -1304,10 +1308,8 @@ theorem primer_teorema_isomorfia {G G'} [Grupo G] [Grupo G'] (f : G → G') (hf 
 class AccionGrupo (G : Type _) (X : Type _) [Grupo G] where
   -- ρ : G × X → X
   rho : G → X → X
-
   -- ρ(e, x) = x
   accion_neutro : ∀ x : X, rho 1 x = x
-
   --  ρ(g', ρ(g, x)) = ρ(g'g, x)
   -- lo escribimos como ρ(g1 * g2, x) = ρ(g1, ρ(g2, x))
   accion_comp : ∀ g1 g2 : G, ∀ x : X, rho (g1 * g2) x = rho g1 (rho g2 x)
@@ -1332,15 +1334,12 @@ def Orbita (x : X) : X → Prop :=
 -- El Estabilizador de x (I(x)) y la demostración de que es un Subgrupo de G
 def Estabilizador (x : X) : Subgrupo G where
   filtro g := rho g x = x
-
   neutro_sub := accion_neutro x
-
   oper_sub := by
     intro g1 g2 h1 h2
     calc rho (g1 * g2) x = rho g1 (rho g2 x) := accion_comp g1 g2 x
          _ = rho g1 x := by rw [h2]
          _ = x := by rw [h1]
-
   inv_sub := by
     intro g hg
     calc rho (g⁻¹) x = rho (g⁻¹) (rho g x) := by rw [hg]
@@ -1416,3 +1415,913 @@ theorem f_orbita_sobreyectiva (x : X) : Function.Surjective (f_orbita (G := G) x
 noncomputable def equiv_orbita_estabilizador (x : X) : Quotient (setoidDcha (Estabilizador (G := G) x)) ≃ {y : X // Orbita (G := G) x y} :=
   -- Le pasamos la funcion f_orbita y las pruebas de que es inyectiva y sobreyectiva para construir la biyección
   Equiv.ofBijective (f_orbita (G := G) x) ⟨f_orbita_inyectiva (G := G) x, f_orbita_sobreyectiva (G := G) x⟩
+
+
+
+-- |O_x| = [G : I(x)]
+theorem card_orb_eq_estabilizador [Fintype G] (x : X) [Fintype {y : X // Orbita (G := G) x y}] : Fintype.card {y : X // Orbita (G := G) x y} = [G : Estabilizador (G := G) x] := by
+  unfold indice
+  rw [card_num_clases_igual (Estabilizador (G := G) x)]
+  exact Fintype.card_congr (equiv_orbita_estabilizador (G := G) x).symm
+
+
+
+
+-- Definimos la relación de estar en la misma órbita: x ~ y si existe g tal que y = g*x
+def RelOrbita (x y : X) : Prop :=
+  ∃ g : G, y = rho g x
+
+-- Demostramos que es una relación de equivalencia (Reflexiva, Simétrica y Transitiva)
+theorem relOrbita_es_equivalencia : Equivalence (RelOrbita (G := G) (X := X)) := {
+  refl := by
+    intro x
+    -- x = 1 * x
+    use (1 : G)
+    exact (accion_neutro x).symm
+
+  symm := by
+    intro x y ⟨g, hg⟩
+    -- Si y = g * x, entonces x = g⁻¹ * y
+    use g⁻¹
+    calc x = rho (1 : G) x := (accion_neutro x).symm
+         _ = rho (g⁻¹ * g) x := by rw [← Grupo.oper_inv g]
+         _ = rho g⁻¹ (rho g x) := accion_comp g⁻¹ g x
+         _ = rho g⁻¹ y := by rw [hg]
+
+  trans := by
+    intro x y z ⟨g1, h1⟩ ⟨g2, h2⟩
+    -- Si y = g1 * x  y  z = g2 * y, entonces z = (g2 * g1) * x
+    use (g2 * g1)
+    calc z = rho g2 y := h2
+         _ = rho g2 (rho g1 x) := by rw [h1]
+         _ = rho (g2 * g1) x := (accion_comp g2 g1 x).symm
+}
+
+-- Definimos el  conjunto cociente X/G
+def setoidOrbita : Setoid X :=
+  ⟨RelOrbita (G := G), relOrbita_es_equivalencia⟩
+
+
+open scoped BigOperators -- Esto es para usar el símbolo ∑
+
+
+-- La ecuación de Órbitas.
+-- El cardinal de X es igual a la suma de los cardinales de sus órbitas.
+theorem ecuacion_orbitas [Fintype X] [Fintype G] [Fintype (Quotient (setoidOrbita (G := G) (X := X)))] :
+    Fintype.card X = ∑ O : Quotient (setoidOrbita (G := G) (X := X)),
+      Quotient.liftOn O (fun x => Fintype.card {y // Orbita (G := G) x y}) (by
+        intro a b hab
+        dsimp
+        -- Construimos una biyección entre la órbita de 'a' y la órbita de 'b'
+        apply Fintype.card_congr
+        exact {
+          toFun := fun ⟨y, hy⟩ => ⟨y, by
+            rcases hy with ⟨g, hg⟩
+            rcases hab with ⟨g_ab, h_ab⟩
+            -- Demostramos que a = rho g_ab⁻¹ b
+            have ha : a = rho (g_ab⁻¹) b := by
+              calc a = rho (1 : G) a := (accion_neutro a).symm
+                   _ = rho (g_ab⁻¹ * g_ab) a := by rw [← Grupo.oper_inv g_ab]
+                   _ = rho g_ab⁻¹ (rho g_ab a) := accion_comp g_ab⁻¹ g_ab a
+                   _ = rho g_ab⁻¹ b := by rw [← h_ab]
+            -- Con esto, vemos que y está en la órbita de b
+            use g * g_ab⁻¹
+            calc y = rho g a := hg
+                 _ = rho g (rho g_ab⁻¹ b) := by rw [ha]
+                 _ = rho (g * g_ab⁻¹) b := (accion_comp g g_ab⁻¹ b).symm
+          ⟩,
+          invFun := fun ⟨y, hy⟩ => ⟨y, by
+            rcases hy with ⟨g, hg⟩
+            rcases hab with ⟨g_ab, h_ab⟩
+            -- La dirección inversa es directa
+            use g * g_ab
+            calc y = rho g b := hg
+                 _ = rho g (rho g_ab a) := by rw [h_ab]
+                 _ = rho (g * g_ab) a := (accion_comp g g_ab a).symm
+          ⟩,
+          left_inv := fun _ => Subtype.ext rfl,
+          right_inv := fun _ => Subtype.ext rfl
+        }
+      ) := by
+  -- Añadimos la táctica classical para que Lean asuma que todo subconjunto es finito
+  classical
+
+  -- X es biyectivo a la unión disjunta de sus clases de equivalencia
+  have e : X ≃ Σ O : Quotient (setoidOrbita (G := G) (X := X)), {y : X // Quotient.mk (setoidOrbita (G := G) (X := X)) y = O} :=
+    (Equiv.sigmaFiberEquiv (Quotient.mk (setoidOrbita (G := G) (X := X)))).symm
+
+  -- Por tanto, el cardinal de X es igual al cardinal de esta unión disjunta.
+  rw [Fintype.card_congr e]
+  --  El cardinal de una unión disjunta es la suma de los cardinales de cada una de sus partes.
+  rw [Fintype.card_sigma]
+
+  -- Usamos Finset.sum_congr para decir que los términos dentro del sumatorio son iguales.
+  apply Finset.sum_congr rfl
+  intro O _
+
+  -- Abrimos la clase de equivalencia O
+  induction O using Quotient.ind
+
+  --Nombramos a la variable extra a como 'a' y a la hipótesis extra como 'h'
+  rename_i a h
+  dsimp
+
+  -- Demostramos que el conjunto {y // ⟦y⟧ = ⟦a⟧} tiene el mismo cardinal que {y // Orbita a y}
+  apply Fintype.card_congr
+  exact {
+    toFun := fun ⟨y, hy⟩ => ⟨y, by
+      -- hy nos dice que ⟦y⟧ = ⟦a⟧, es decir, RelOrbita y a.
+      -- Por simetría, obtenemos RelOrbita a y (que es la definición de Orbita a y)
+      have h_rel : (setoidOrbita (G := G) (X := X)).r y a := Quotient.exact hy
+      exact relOrbita_es_equivalencia.symm h_rel
+    ⟩,
+    invFun := fun ⟨y, hy⟩ => ⟨y, by
+      -- Al revés: si tenemos Orbita a y (RelOrbita a y),
+      -- por simetría es RelOrbita y a, luego ⟦y⟧ = ⟦a⟧
+      have h_rel : (setoidOrbita (G := G) (X := X)).r y a := relOrbita_es_equivalencia.symm hy
+      exact Quotient.sound h_rel
+    ⟩,
+    left_inv := fun _ => Subtype.ext rfl,
+    right_inv := fun _ => Subtype.ext rfl
+  }
+
+
+theorem max_potencia_factorial_primo (p r : ℕ) (hp : Nat.Prime p) (hr_pos : r ≥ 1) (h_div : p ^ r ∣ Nat.factorial p) : r = 1 := by
+  -- Por contradicción
+  by_contra h_neq
+  -- Si r >= 1 y r != 1, obligatoriamente r >= 2
+  have hr_ge_2 : r ≥ 2 := by omega
+
+  -- Si p^r divide a p!, y r >= 2, por transitividad p^2 divide a p!
+  have h_div2 : p ^ 2 ∣ Nat.factorial p :=
+    Nat.dvd_trans (Nat.pow_dvd_pow p hr_ge_2) h_div
+
+  -- Analizamos los casos del primo p. Por ser primo, no puede ser 0.
+  cases p with
+  | zero =>
+    exact (Nat.not_prime_zero hp).elim
+  | succ k =>
+    -- Expresamos p como (k+1). Reescribimos p^2 como (k+1)*(k+1)
+    rw [pow_two] at h_div2
+
+    -- La definición de (k+1)! es (k+1) * k!
+    rw [Nat.factorial_succ] at h_div2
+
+    -- Tenemos (k+1)*(k+1) ∣ (k+1) * k!. Cancelamos (k+1) a ambos lados.
+    rw [Nat.mul_dvd_mul_iff_left (Nat.succ_pos k)] at h_div2
+
+    -- Si un número primo divide a k!, debe ser <= k
+    have h_le : k + 1 ≤ k := (Nat.Prime.dvd_factorial hp).mp h_div2
+    -- Contradicción evidente: k + 1 no puede ser menor o igual a k
+    omega
+
+
+
+-- El núcleo de la acción de G sobre G/H por traslaciones
+def nucleo_accion {G : Type _} [Grupo G] (H : Subgrupo G) : Subgrupo G where
+  filtro k := ∀ a : G, H.filtro ((a⁻¹) * k * a)
+
+  neutro_sub := by
+    intro a
+    have h_eq : (a⁻¹ * 1) * a = 1 := by
+      calc (a⁻¹ * 1) * a = a⁻¹ * a := by rw [Grupo.oper_neutro]
+                       _ = 1 := by rw [Grupo.oper_inv]
+    rw [h_eq]
+    exact H.neutro_sub
+
+  oper_sub := by
+    intro x y hx hy a
+    have hx_a := hx a
+    have hy_a := hy a
+    have hxy_H := H.oper_sub hx_a hy_a
+    have h_eq : ((a⁻¹ * x) * a) * ((a⁻¹ * y) * a) = (a⁻¹ * (x * y)) * a := by
+      calc ((a⁻¹ * x) * a) * ((a⁻¹ * y) * a)
+        _ = (((a⁻¹ * x) * a) * (a⁻¹ * y)) * a := by rw [← Grupo.oper_asociativa ((a⁻¹ * x) * a) (a⁻¹ * y) a]
+        _ = ((a⁻¹ * x) * (a * (a⁻¹ * y))) * a := by rw [← Grupo.oper_asociativa (a⁻¹ * x) a (a⁻¹ * y)]
+        _ = ((a⁻¹ * x) * ((a * a⁻¹) * y)) * a := by rw [← Grupo.oper_asociativa a a⁻¹ y]
+        _ = ((a⁻¹ * x) * (1 * y)) * a := by rw [Grupo.inv_oper]
+        _ = ((a⁻¹ * x) * y) * a := by rw [Grupo.neutro_oper]
+        _ = (a⁻¹ * (x * y)) * a := by rw [Grupo.oper_asociativa]
+    rw [h_eq] at hxy_H
+    exact hxy_H
+
+  inv_sub := by
+    intro x hx a
+    have hx_a := hx a
+    have hinv_H := H.inv_sub hx_a
+    have h_eq : (((a⁻¹ * x) * a)⁻¹) = (a⁻¹ * x⁻¹) * a := by
+      calc (((a⁻¹ * x) * a)⁻¹)
+        _ = a⁻¹ * (a⁻¹ * x)⁻¹ := by rw [Grupo.inv_compuesto]
+        _ = a⁻¹ * (x⁻¹ * (a⁻¹)⁻¹) := by rw [Grupo.inv_compuesto]
+        _ = a⁻¹ * (x⁻¹ * a) := by rw [Grupo.inv_inv]
+        _ = (a⁻¹ * x⁻¹) * a := by rw [← Grupo.oper_asociativa]
+    rw [h_eq] at hinv_H
+    exact hinv_H
+
+
+-- El núcleo de la acción siempre es un subgrupo normal de G
+theorem nucleo_accion_es_normal {G : Type _} [Grupo G] (H : Subgrupo G) : nucleo_accion H ⊲ G := by
+  intro g
+  ext x
+  dsimp [ClaseDcha, RelDcha, ClaseIzq, RelIzq, nucleo_accion]
+  constructor
+  · intro h_dcha a
+    have h_hyp := h_dcha (g⁻¹ * a)
+    have h_eq : (((g⁻¹ * a)⁻¹ * (g⁻¹ * x)) * (g⁻¹ * a)) = ((a⁻¹ * (x * g⁻¹)) * a) := by
+      calc (((g⁻¹ * a)⁻¹ * (g⁻¹ * x)) * (g⁻¹ * a))
+        _ = ((a⁻¹ * (g⁻¹)⁻¹) * (g⁻¹ * x)) * (g⁻¹ * a) := by rw [Grupo.inv_compuesto]
+        _ = ((a⁻¹ * g) * (g⁻¹ * x)) * (g⁻¹ * a) := by rw [Grupo.inv_inv]
+        _ = (a⁻¹ * (g * (g⁻¹ * x))) * (g⁻¹ * a) := by rw [Grupo.oper_asociativa a⁻¹ g (g⁻¹ * x)]
+        _ = (a⁻¹ * ((g * g⁻¹) * x)) * (g⁻¹ * a) := by rw [← Grupo.oper_asociativa g g⁻¹ x]
+        _ = (a⁻¹ * (1 * x)) * (g⁻¹ * a) := by rw [Grupo.inv_oper]
+        _ = (a⁻¹ * x) * (g⁻¹ * a) := by rw [Grupo.neutro_oper]
+        _ = ((a⁻¹ * x) * g⁻¹) * a := by rw [Grupo.oper_asociativa]
+        _ = (a⁻¹ * (x * g⁻¹)) * a := by rw [← Grupo.oper_asociativa a⁻¹ x g⁻¹]
+    rw [← h_eq]
+    exact h_hyp
+  · intro h_izq a
+    have h_hyp := h_izq (g * a)
+    have h_eq : (((g * a)⁻¹ * (x * g⁻¹)) * (g * a)) = ((a⁻¹ * (g⁻¹ * x)) * a) := by
+      calc (((g * a)⁻¹ * (x * g⁻¹)) * (g * a))
+        _ = ((a⁻¹ * g⁻¹) * (x * g⁻¹)) * (g * a) := by rw [Grupo.inv_compuesto]
+        _ = (a⁻¹ * (g⁻¹ * (x * g⁻¹))) * (g * a) := by rw [Grupo.oper_asociativa a⁻¹ g⁻¹ (x * g⁻¹)]
+        _ = (a⁻¹ * ((g⁻¹ * x) * g⁻¹)) * (g * a) := by rw [← Grupo.oper_asociativa g⁻¹ x g⁻¹]
+        _ = ((a⁻¹ * (g⁻¹ * x)) * g⁻¹) * (g * a) := by rw [← Grupo.oper_asociativa a⁻¹ (g⁻¹ * x) g⁻¹]
+        _ = (a⁻¹ * (g⁻¹ * x)) * (g⁻¹ * (g * a)) := by rw [Grupo.oper_asociativa (a⁻¹ *(g⁻¹ * x)) g⁻¹ (g * a)]
+        _ = (a⁻¹ * (g⁻¹ * x)) * ((g⁻¹ * g) * a) := by rw [← Grupo.oper_asociativa g⁻¹ g a]
+        _ = (a⁻¹ * (g⁻¹ * x)) * (1 * a) := by rw [Grupo.oper_inv]
+        _ = (a⁻¹ * (g⁻¹ * x)) * a := by rw [Grupo.neutro_oper]
+    rw [← h_eq]
+    exact h_hyp
+
+-- El núcleo de la acción está siempre contenido en H
+theorem nucleo_accion_contenido {G : Type _} [Grupo G] (H : Subgrupo G) : SubgrupoContenido (nucleo_accion H) H := by
+  intro k hk
+  have hk_1 := hk 1
+  have h_eq : ((1:G)⁻¹ * k) * 1 = k := by
+    calc ((1:G)⁻¹ * k) * 1 = (1 * k) * 1 := by rw [Grupo.inv_neutro]
+                         _ = k * 1 := by rw [Grupo.neutro_oper]
+                         _ = k := by rw [Grupo.oper_neutro]
+  rw [h_eq] at hk_1
+  exact hk_1
+
+
+
+
+-- Consideramos el grupo de permutaciones de Mathlib dentro de nuestra clase Grupo para poder usarlo
+instance GrupoPerm {A : Type _} : Grupo (Equiv.Perm A) where
+  mul := (· * ·)
+  one := 1
+  inv := (·⁻¹)
+  oper_asociativa f g h := mul_assoc f g h
+  oper_neutro f := mul_one f
+  neutro_oper f := one_mul f
+  oper_inv f := inv_mul_cancel f
+  inv_oper f := mul_inv_cancel f
+
+
+/- Homomorfismo de G a el grupo simétrico de G/H -/
+def phi_equiv {G : Type _} [Grupo G] (H : Subgrupo G) (g : G) : Equiv.Perm (Quotient (setoidDcha H)) where
+  toFun := Quotient.lift (fun x => Quotient.mk (setoidDcha H) (g * x)) (by
+    intro a b hab
+    apply Quotient.sound
+    change H.filtro ((g * a)⁻¹ * (g * b))
+    have h1 : (g * a)⁻¹ * (g * b) = a⁻¹ * b := by
+      calc (g * a)⁻¹ * (g * b) = (a⁻¹ * g⁻¹) * (g * b) := by rw [Grupo.inv_compuesto]
+        _ = a⁻¹ * (g⁻¹ * (g * b)) := by rw [← Grupo.oper_asociativa]
+        _ = a⁻¹ * ((g⁻¹ * g) * b) := by rw [Grupo.oper_asociativa g⁻¹ g b]
+        _ = a⁻¹ * (1 * b) := by rw [Grupo.oper_inv]
+        _ = a⁻¹ * b := by rw [Grupo.neutro_oper]
+    rw [h1]
+    exact hab
+  )
+  invFun := Quotient.lift (fun x => Quotient.mk (setoidDcha H) (g⁻¹ * x)) (by
+    intro a b hab
+    apply Quotient.sound
+    -- Hacemos lo mismo aquí para ver la expresión real
+    change H.filtro ((g⁻¹ * a)⁻¹ * (g⁻¹ * b))
+    have h1 : (g⁻¹ * a)⁻¹ * (g⁻¹ * b) = a⁻¹ * b := by
+      calc (g⁻¹ * a)⁻¹ * (g⁻¹ * b) = (a⁻¹ * (g⁻¹)⁻¹) * (g⁻¹ * b) := by rw [Grupo.inv_compuesto]
+        _ = (a⁻¹ * g) * (g⁻¹ * b) := by rw [Grupo.inv_inv]
+        _ = a⁻¹ * (g * (g⁻¹ * b)) := by rw [← Grupo.oper_asociativa]
+        _ = a⁻¹ * ((g * g⁻¹) * b) := by rw [Grupo.oper_asociativa g g⁻¹ b]
+        _ = a⁻¹ * (1 * b) := by rw [Grupo.inv_oper]
+        _ = a⁻¹ * b := by rw [Grupo.neutro_oper]
+    rw [h1]
+    exact hab
+  )
+  left_inv := by
+    intro q
+    induction q using Quotient.ind
+    rename_i x
+    change Quotient.mk (setoidDcha H) (g⁻¹ * (g * x)) = Quotient.mk (setoidDcha H) x
+    have h1 : (g⁻¹ * (g * x)) = x := by
+      calc g⁻¹ * (g * x) = (g⁻¹ * g) * x := by rw [Grupo.oper_asociativa g⁻¹ g x]
+        _ = 1 * x := by rw [Grupo.oper_inv]
+        _ = x := by rw [Grupo.neutro_oper]
+    rw [h1]
+  right_inv := by
+    intro q
+    induction q using Quotient.ind
+    rename_i x
+    change Quotient.mk (setoidDcha H) (g * (g⁻¹ * x)) = Quotient.mk (setoidDcha H) x
+    have h1 : (g * (g⁻¹ * x)) = x := by
+      calc g * (g⁻¹ * x) = (g * g⁻¹) * x := by rw [Grupo.oper_asociativa g g⁻¹ x]
+        _ = 1 * x := by rw [Grupo.inv_oper]
+        _ = x := by rw [Grupo.neutro_oper]
+    rw [h1]
+
+
+
+-- Vemos que phi_equiv es un homomorfismo
+theorem phi_equiv_es_homomorfismo {G : Type _} [Grupo G] (H : Subgrupo G) : EsHomomorfismo (phi_equiv H) := by
+  intro a b
+  apply Equiv.ext
+  intro q
+  induction q using Quotient.ind
+  rename_i x
+  -- Añadimos .symm para darle la vuelta a la igualdad de la asociatividad
+  have h_eq : (a * b) * x = a * (b * x) := (Grupo.oper_asociativa a b x).symm
+  exact Quotient.sound (by
+    change H.filtro (((a * b) * x)⁻¹ * (a * (b * x)))
+    -- Cambiamos inv_oper por oper_inv
+    have h_inv : ((a * b) * x)⁻¹ * (a * (b * x)) = 1 := by rw [h_eq, Grupo.oper_inv]
+    rw [h_inv]
+    exact H.neutro_sub
+  )
+
+-- El núcleo de phi_equiv es exactamente el subgrupo K (nucleo_accion)
+theorem ker_phi_eq_nucleo {G : Type _} [Grupo G] (H : Subgrupo G) : Ker (phi_equiv H) (phi_equiv_es_homomorfismo H) = nucleo_accion H := by
+  apply subgrupo_igualdad
+  intro k
+  constructor
+  · intro hk
+    dsimp [Ker] at hk
+    intro a
+    have h1 := congrFun (congrArg Equiv.toFun hk) (Quotient.mk (setoidDcha H) a)
+    dsimp [phi_equiv] at h1
+    have h2 : (setoidDcha H).r a (k * a) := Quotient.exact h1.symm
+    dsimp [setoidDcha, RelDcha] at h2
+    rw [← Grupo.oper_asociativa]
+    exact h2
+  · intro hk
+    dsimp [Ker]
+    apply Equiv.ext
+    intro q
+    induction q using Quotient.ind
+    rename_i a
+    dsimp [phi_equiv]
+    symm
+    apply Quotient.sound
+    change H.filtro (a⁻¹ * (k * a))
+    rw [Grupo.oper_asociativa]
+    exact hk a
+
+
+theorem indice_primo_min_es_normal {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p : ℕ) (hp_prime : Nat.Prime p) (h_indice : @indice G _ _ H = p)
+ (hp_div : p ∣ orden_grupo G) (hp_min : ∀ q : ℕ, Nat.Prime q → q ∣ orden_grupo G → p ≤ q) : H ⊲ G := by
+
+  have h_card_X : Fintype.card (Quotient (setoidIzq H)) = p := h_indice
+  -- K es el núcleo de la acción
+  let K : Subgrupo G := nucleo_accion H
+  have hK_normal : K ⊲ G := nucleo_accion_es_normal H
+  have hK_sub_H : SubgrupoContenido K H := nucleo_accion_contenido H
+
+  -- Usamos el teorema de los índices
+  have h_GK_eq : indice K = p * indice (res_sub K H) := by
+    have h_ind := teorema_indices K H hK_sub_H
+    rw [h_indice] at h_ind
+    exact h_ind
+
+  have h_p_div_GK : p ∣ indice K := by
+    rw [h_GK_eq]
+    exact Nat.dvd_mul_right p _
+
+  -- G/K es isomorfo a un subgrupo del grupo simétrico S_X
+  have h_GK_div_fact : indice K ∣ Nat.factorial p := by
+    have phi_es_hom := phi_equiv_es_homomorfismo H
+    have ker_eq_K := ker_phi_eq_nucleo H
+
+    have iso := primer_teorema_isomorfia (phi_equiv H) phi_es_hom
+    have h_bij : Function.Bijective (f_barra (phi_equiv H) phi_es_hom) := ⟨iso.2.1, iso.2.2⟩
+
+    have card_ker_eq_im : Fintype.card (Quotient (setoidDcha (Ker (phi_equiv H) phi_es_hom))) = Fintype.card {y // (Im (phi_equiv H) phi_es_hom).filtro y} := by
+      apply Fintype.card_congr
+      exact Equiv.ofBijective _ h_bij
+
+    have indice_K_eq_Im : indice K = Fintype.card {y // (Im (phi_equiv H) phi_es_hom).filtro y} := by
+      calc indice K = Fintype.card (Quotient (setoidIzq K)) := rfl
+        _ = Fintype.card (Quotient (setoidDcha K)) := card_num_clases_igual K
+        _ = Fintype.card (Quotient (setoidDcha (Ker (phi_equiv H) phi_es_hom))) := by rw [ker_eq_K]
+        _ = Fintype.card {y // (Im (phi_equiv H) phi_es_hom).filtro y} := card_ker_eq_im
+
+    have lagrange_perm := lagrange (Im (phi_equiv H) phi_es_hom)
+    have div_perm : Fintype.card {y // (Im (phi_equiv H) phi_es_hom).filtro y} ∣ orden_grupo (Equiv.Perm (Quotient (setoidDcha H))) := by
+      exact ⟨[Equiv.Perm (Quotient (setoidDcha H)) : Im (phi_equiv H) phi_es_hom], lagrange_perm⟩
+
+    have card_X : Fintype.card (Quotient (setoidDcha H)) = p := by
+      rw [← card_num_clases_igual H]
+      exact h_card_X
+
+    have card_perm : orden_grupo (Equiv.Perm (Quotient (setoidDcha H))) = Nat.factorial p := by
+      unfold orden_grupo
+      rw [Fintype.card_perm, card_X]
+
+    rw [indice_K_eq_Im, ← card_perm]
+    exact div_perm
+
+  -- Demostramos que p es el unico divisor primo de [G : K], luego [G:K] = p
+  have h_solo_p_divide : ∀ q : ℕ, Nat.Prime q → q ∣ indice K → q = p := by
+    intro q hq_prime hq_div
+    have hq_le_p : q ≤ p := by
+      have hq_div_fact : q ∣ Nat.factorial p := Nat.dvd_trans hq_div h_GK_div_fact
+      exact (Nat.Prime.dvd_factorial hq_prime).mp hq_div_fact
+
+    have hq_div_G : q ∣ orden_grupo G := by
+      have h_GK_div_G : indice K ∣ orden_grupo G := by
+        rw [lagrange K, Nat.mul_comm]
+        exact Nat.dvd_mul_right (indice K) _
+      exact Nat.dvd_trans hq_div h_GK_div_G
+
+    have hp_le_q : p ≤ q := hp_min q hq_prime hq_div_G
+    omega
+
+  have h_GK_eq_p : indice K = p := by
+    have ⟨m, hm⟩ := h_p_div_GK
+    have h2 : p * m ∣ Nat.factorial p := by rw [← hm]; exact h_GK_div_fact
+    cases p with
+    | zero => exact (Nat.not_prime_zero hp_prime).elim
+    | succ k =>
+      have h_fact : Nat.factorial (k + 1) = (k + 1) * Nat.factorial k := rfl
+      rw [h_fact] at h2
+      have h3 : m ∣ Nat.factorial k := Nat.dvd_of_mul_dvd_mul_left (by omega) h2
+      have h_m_eq_1 : m = 1 := by
+        by_contra h_m_neq_1
+        have h_ex := Nat.exists_prime_and_dvd h_m_neq_1
+        rcases h_ex with ⟨q, hq_prime, hq_div_m⟩
+        have hq_div_kfact : q ∣ Nat.factorial k := Nat.dvd_trans hq_div_m h3
+        have hq_le_k : q ≤ k := (Nat.Prime.dvd_factorial hq_prime).mp hq_div_kfact
+        have hq_div_n : q ∣ indice K := by
+          rw [hm]
+          rcases hq_div_m with ⟨c, hc⟩
+          use (k + 1) * c
+          calc (k + 1) * m = (k + 1) * (q * c) := by rw [hc]
+               _ = ((k + 1) * q) * c := by rw [← Nat.mul_assoc]
+               _ = (q * (k + 1)) * c := by rw [Nat.mul_comm (k + 1) q]
+               _ = q * ((k + 1) * c) := by rw [Nat.mul_assoc]
+        have hq_eq_p : q = k + 1 := h_solo_p_divide q hq_prime hq_div_n
+        rw [hq_eq_p] at hq_le_k
+        omega
+      rw [hm, h_m_eq_1, mul_one]
+
+
+  -- Como [G : K] = p y [G : K] = p * [H : K], entonces queda que [H : K] = 1.
+  have h_HK_eq_1 : indice (res_sub K H) = 1 := by
+    have h_eq : p * 1 = p * indice (res_sub K H) := by
+      calc p * 1 = p := mul_one p
+           _ = indice K := h_GK_eq_p.symm
+           _ = p * indice (res_sub K H) := h_GK_eq
+    exact Nat.eq_of_mul_eq_mul_left hp_prime.pos h_eq.symm
+
+  have h_H_eq_K : H = K := by
+    apply subgrupo_igualdad
+    intro x
+    constructor
+    · intro hx
+      have h_subsing : Subsingleton (Quotient (setoidIzq (res_sub K H))) :=
+        Fintype.card_le_one_iff_subsingleton.mp (by unfold indice at h_HK_eq_1; omega)
+      let q_1 := Quotient.mk (setoidIzq (res_sub K H)) (1 : {y // H.filtro y})
+      let q_x := Quotient.mk (setoidIzq (res_sub K H)) ⟨x, hx⟩
+      have h_eq_q : q_1 = q_x := Subsingleton.elim q_1 q_x
+      have h_rel : RelIzq (res_sub K H) (1 : {y // H.filtro y}) ⟨x, hx⟩ := Quotient.exact h_eq_q
+      change K.filtro (x * (1:G)⁻¹) at h_rel
+      have h_alg : x * (1:G)⁻¹ = x := by rw [Grupo.inv_neutro, Grupo.oper_neutro]
+      rw [h_alg] at h_rel
+      exact h_rel
+    · intro hx
+      exact hK_sub_H x hx
+
+  -- Al ser H = K, y K normal, entonces H es normal.
+  rw [h_H_eq_K]
+  exact hK_normal
+
+
+
+-- Ahora definimos lo que es un p-grupo
+def EsPGrupo (G : Type _) [Grupo G] [Fintype G] (p : ℕ) : Prop :=
+  Nat.Prime p ∧ ∃ m : ℕ, m > 0 ∧ orden_grupo G = p ^ m
+
+
+
+-- Si p divide a cada elemento de un sumatorio, divide a la suma total
+theorem p_divide_suma {α : Type _} (s : Finset α) (f : α → ℕ) (p : ℕ)
+    (h : ∀ x ∈ s, p ∣ f x) : p ∣ ∑ x ∈ s, f x := by
+  classical
+  --Hacemos inducción sobre el conjunto finito s con Finset.induction_on
+  induction s using Finset.induction_on with
+  | empty =>
+    -- La suma vacía es 0, y p | 0 siempre
+    simp only [Finset.sum_empty]
+    exact Nat.dvd_zero p
+    -- En el caso inductivo usamos insert para separar un elemento 'a' del resto del conjunto s'
+  | insert a s' ha ih =>
+    -- Separamos la suma en 'a' y el resto del sumatorio '(s')'
+    rw [Finset.sum_insert ha]
+    apply Nat.dvd_add
+    · -- Demostramos que p | f(a)
+      apply h a
+      --FInset.mem_insert_self a s' es la definición de que 'a' pertenece al conjunto
+      exact Finset.mem_insert_self a s'
+    · -- Demostramos por hipótesis de inducción que p | suma(s')
+      apply ih
+      intro x hx
+      apply h x
+      exact Finset.mem_insert_of_mem hx
+
+
+theorem card_congr_puntos_fijos {G X : Type _} [Grupo G] [Fintype G] [AccionGrupo G X] [Fintype X] (p : ℕ) (h_pgrupo : EsPGrupo G p) [Fintype {x : X // PuntosFijos (G := G) x}]
+    [Fintype (Quotient (setoidOrbita (G := G) (X := X)))] : Nat.ModEq p (Fintype.card X) (Fintype.card {x : X // PuntosFijos (G := G) x}) := by
+
+  -- p es primo y |G| = p^m
+  rcases h_pgrupo with ⟨hp, m, hm_pos, hG_card⟩
+  -- Para no repetir el Quotient.liftOn varias veces definimos card_O
+  let card_O (O : Quotient (setoidOrbita (G := G) (X := X))) : ℕ :=
+    Quotient.liftOn O (fun x => Fintype.card {y // Orbita (G := G) x y}) (by
+      intro a b hab
+      apply Fintype.card_congr
+      exact ⟨fun ⟨y, hy⟩ => ⟨y, relOrbita_es_equivalencia.trans (relOrbita_es_equivalencia.symm hab) hy⟩,
+             fun ⟨y, hy⟩ => ⟨y, relOrbita_es_equivalencia.trans hab hy⟩,
+             fun _ => Subtype.ext rfl,
+             fun _ => Subtype.ext rfl⟩
+    )
+
+  -- Usamos la ecuación de orbitas
+  have h_eq : Fintype.card X = ∑ O : Quotient (setoidOrbita (G := G) (X := X)), card_O O := by
+    exact ecuacion_orbitas (G := G) (X := X)
+
+  -- Separamos el sumatorio en órbitas triviales (tamaño 1) y no triviales (tamaño distinto de 1)
+  have h_split : Fintype.card X =
+      (∑ O ∈ Finset.univ.filter (fun O => card_O O = 1), card_O O) +
+      (∑ O ∈ Finset.univ.filter (fun O => card_O O ≠ 1), card_O O) := by
+    rw [h_eq]
+    exact (Finset.sum_filter_add_sum_filter_not Finset.univ (fun O => card_O O = 1) card_O).symm
+
+  -- Demostramos que la suma de órbitas de tamaño 1 es exactamente el número de puntos fijos |X₀|
+  have h_sum_fijos : ∑ O ∈ Finset.univ.filter (fun O => card_O O = 1), card_O O = Fintype.card {x : X // PuntosFijos (G := G) x} := by
+    have h_unos : ∑ O ∈ Finset.univ.filter (fun O => card_O O = 1), card_O O = (Finset.univ.filter (fun O => card_O O = 1)).card := by
+      calc ∑ O ∈ Finset.univ.filter (fun O => card_O O = 1), card_O O
+        _ = ∑ O ∈ Finset.univ.filter (fun O => card_O O = 1), 1 := by
+          apply Finset.sum_congr rfl
+          intro O hO
+          exact (Finset.mem_filter.mp hO).right
+        _ = (Finset.univ.filter (fun O => card_O O = 1)).card := by simp
+
+    rw [h_unos]
+
+    let f : {O // card_O O = 1} ≃ {x : X // PuntosFijos (G := G) x} := {
+      toFun := fun ⟨O, hO⟩ =>
+        let x := O.out
+        ⟨x, by
+          intro g
+          have h_orb_card : Fintype.card {y // Orbita (G := G) x y} = 1 := by
+            have h_eq2 : Quotient.mk (setoidOrbita (G := G) (X := X)) x = O := Quotient.out_eq O
+            rw [← h_eq2] at hO
+            exact hO
+          have h_orb_gx : Orbita (G := G) x (rho g x) := ⟨g, rfl⟩
+          have h_sub : Subsingleton {y // Orbita (G := G) x y} := Fintype.card_le_one_iff_subsingleton.mp (by omega)
+          have h_eq_y : (⟨rho g x, h_orb_gx⟩ : {y // Orbita (G := G) x y}) = ⟨x, ⟨1, (accion_neutro x).symm⟩⟩ := Subsingleton.elim _ _
+          injection h_eq_y
+        ⟩
+      invFun := fun ⟨x, hx⟩ =>
+        ⟨Quotient.mk (setoidOrbita (G := G) (X := X)) x, by
+          dsimp [card_O]
+          apply Fintype.card_eq_one_iff.mpr
+          use ⟨x, ⟨1, (accion_neutro x).symm⟩⟩
+          intro ⟨y, ⟨g, hg⟩⟩
+          apply Subtype.ext
+          dsimp
+          rw [hg, hx g]
+        ⟩
+      left_inv := fun ⟨O, hO⟩ => Subtype.ext (Quotient.out_eq O)
+      right_inv := fun ⟨x, hx⟩ => by
+        ext
+        dsimp
+        have h_rel : RelOrbita (G := G) ((Quotient.mk (setoidOrbita (G := G) (X := X)) x).out) x :=
+          Quotient.exact (Quotient.out_eq (Quotient.mk (setoidOrbita (G := G) (X := X)) x))
+        rcases h_rel with ⟨g, hg⟩
+        calc (Quotient.mk (setoidOrbita (G := G) (X := X)) x).out
+          _ = rho 1 ((Quotient.mk (setoidOrbita (G := G) (X := X)) x).out) := (accion_neutro _).symm
+          _ = rho (g⁻¹ * g) ((Quotient.mk (setoidOrbita (G := G) (X := X)) x).out) := by rw [← Grupo.oper_inv g]
+          _ = rho g⁻¹ (rho g ((Quotient.mk (setoidOrbita (G := G) (X := X)) x).out)) := accion_comp _ _ _
+          _ = rho g⁻¹ x := by rw [← hg]
+          _ = x := hx g⁻¹
+    }
+
+    calc (Finset.univ.filter (fun O => card_O O = 1)).card
+      _ = Fintype.card {O // card_O O = 1} := by rw [← Fintype.card_subtype]
+      _ = Fintype.card {x : X // PuntosFijos (G := G) x} := Fintype.card_congr f
+
+  -- Demostramos que las órbitas de tamaño > 1 son múltiplos de p
+  have h_div_p : ∀ O ∈ Finset.univ.filter (fun O => card_O O ≠ 1), p ∣ card_O O := by
+    intro O hO
+    have h_neq_1 := (Finset.mem_filter.mp hO).right
+    induction O using Quotient.ind
+    rename_i x
+
+    let n := Fintype.card {y // Orbita (G := G) x y}
+
+    have h_n_neq_1 : n ≠ 1 := h_neq_1
+
+    have h_div : n ∣ orden_grupo G := by
+      change Fintype.card {y // Orbita (G := G) x y} ∣ orden_grupo G
+      rw [card_orb_eq_estabilizador, lagrange (Estabilizador (G := G) x)]
+      exact Nat.dvd_mul_left _ _
+
+    have h_div_pm : n ∣ p^m := by
+      rw [← hG_card]
+      exact h_div
+
+    have ⟨q, hq_prime, hq_div_n⟩ := Nat.exists_prime_and_dvd h_n_neq_1
+    have hq_div_pm : q ∣ p^m := Nat.dvd_trans hq_div_n h_div_pm
+    have hq_div_p : q ∣ p := Nat.Prime.dvd_of_dvd_pow hq_prime hq_div_pm
+
+    -- Usamos Nat.dvd_prime para evaluar los divisores de un primo
+    have h_eq_or : q = 1 ∨ q = p := (Nat.dvd_prime hp).mp hq_div_p
+    have hq_eq_p : q = p := by
+      cases h_eq_or with
+      | inl h1 =>
+        have h_not_one : q ≠ 1 := Nat.Prime.ne_one hq_prime
+        contradiction
+      | inr hpq => exact hpq
+
+    rw [← hq_eq_p]
+    exact hq_div_n
+
+  -- Usamos aritmética modular de suma divisoria
+  have h_sum_mod : Nat.ModEq p (∑ O ∈ Finset.univ.filter (fun O => card_O O ≠ 1), card_O O) 0 := by
+    apply Nat.modEq_zero_iff_dvd.mpr
+    -- Usamos nuestro propio lema, y le pasamso el sumatorio, la función, el primo p y la hipótesis de antes
+    exact p_divide_suma _ card_O p h_div_p
+
+  -- |X| = |X0| + ∑|Ox| ≡ |X0| + 0 ≡ |X0| mod p
+  rw [h_split, h_sum_fijos]
+  have h_mod_add : Nat.ModEq p (Fintype.card {x : X // PuntosFijos (G := G) x} + ∑ O ∈ Finset.univ.filter (fun O => card_O O ≠ 1), card_O O) (Fintype.card {x : X // PuntosFijos (G := G) x} + 0) :=
+    Nat.ModEq.add_left _ h_sum_mod
+
+  rw [Nat.add_zero] at h_mod_add
+  exact h_mod_add
+
+
+ -- Definimos el Normalizador de H en G: N_G(H) = {g ∈ G | gHg⁻¹ = H}
+def Normalizador {G : Type _} [Grupo G] (H : Subgrupo G) : Subgrupo G where
+  filtro g := ∀ h : G, H.filtro h ↔ H.filtro ((g * h) * g⁻¹)
+  neutro_sub := by
+    intro h
+    have h_eq : ((1:G) * h) * (1:G)⁻¹ = h := by
+      calc ((1:G) * h) * (1:G)⁻¹
+        _ = h * (1:G)⁻¹ := by rw [Grupo.neutro_oper]
+        _ = h * 1 := by rw [Grupo.inv_neutro]
+        _ = h := by rw [Grupo.oper_neutro]
+    rw [h_eq]
+  oper_sub := by
+    intro x y hx hy h
+    have h_eq : ((x * y) * h) * (x * y)⁻¹ = (x * ((y * h) * y⁻¹)) * x⁻¹ := by
+      calc ((x * y) * h) * (x * y)⁻¹
+        _ = ((x * y) * h) * (y⁻¹ * x⁻¹) := by rw [Grupo.inv_compuesto]
+        _ = (x * (y * h)) * (y⁻¹ * x⁻¹) := by rw [Grupo.oper_asociativa x y h]
+        _ = x * ((y * h) * (y⁻¹ * x⁻¹)) := by rw [Grupo.oper_asociativa x (y*h) (y⁻¹ * x⁻¹)]
+        _ = x * (((y * h) * y⁻¹) * x⁻¹) := by rw [← Grupo.oper_asociativa (y * h) y⁻¹ x⁻¹]
+        _ = (x * ((y * h) * y⁻¹)) * x⁻¹ := by rw [← Grupo.oper_asociativa x ((y * h) * y⁻¹) x⁻¹]
+    rw [h_eq]
+    -- Aplicamos la transitividad para demostrar que H.filtro ((x * y) * h) ↔ H.filtro ((x * ((y * h) * y⁻¹)) * x⁻¹)
+    exact Iff.trans (hy h) (hx ((y * h) * y⁻¹))
+  inv_sub := by
+    intro x hx h
+    have hx_eval := hx ((x⁻¹ * h) * (x⁻¹)⁻¹)
+    have h_eq : (x * ((x⁻¹ * h) * (x⁻¹)⁻¹)) * x⁻¹ = h := by
+      calc (x * ((x⁻¹ * h) * (x⁻¹)⁻¹)) * x⁻¹
+        _ = (x * ((x⁻¹ * h) * x)) * x⁻¹ := by rw [Grupo.inv_inv]
+        _ = ((x * (x⁻¹ * h)) * x) * x⁻¹ := by rw [← Grupo.oper_asociativa x (x⁻¹ * h) x]
+        _ = (((x * x⁻¹) * h) * x) * x⁻¹ := by rw [← Grupo.oper_asociativa x x⁻¹ h]
+        _ = ((1 * h) * x) * x⁻¹ := by rw [Grupo.inv_oper x]
+        _ = (h * x) * x⁻¹ := by rw [Grupo.neutro_oper]
+        _ = h * (x * x⁻¹) := by rw [Grupo.oper_asociativa]
+        _ = h * 1 := by rw [Grupo.inv_oper x]
+        _ = h := by rw [Grupo.oper_neutro]
+    rw [h_eq] at hx_eval
+    -- hx_eval ahora es  H.filtro ((x⁻¹ * h) * (x⁻¹)⁻¹) ↔ H.filtro h, pero lo necesitamos al revés
+    exact hx_eval.symm
+
+
+
+-- H ≤ N_G(H) (H less or equal (le) menor o igual que normalizdor)
+theorem H_le_normalizador {G : Type _} [Grupo G] (H : Subgrupo G) : SubgrupoContenido H (Normalizador H) := by
+  intro x hx h
+  constructor
+  · intro hh
+    -- H.filtro h → H.filtro ((x * h) * x⁻¹)
+    have h1 : H.filtro (x * h) := H.oper_sub hx hh
+    have h2 : H.filtro (x⁻¹) := H.inv_sub hx
+    exact H.oper_sub h1 h2
+  · intro hh
+    -- H.filtro ((x * h) * x⁻¹) → H.filtro h
+    -- Multiplicamos por la izquierda por x⁻¹ y por la derecha por x
+    have h1 : H.filtro (x⁻¹) := H.inv_sub hx
+    have h3 : H.filtro (x⁻¹ * ((x * h) * x⁻¹)) := H.oper_sub h1 hh
+    have h4 : H.filtro ((x⁻¹ * ((x * h) * x⁻¹)) * x) := H.oper_sub h3 hx
+    have h_eq : (x⁻¹ * ((x * h) * x⁻¹)) * x = h := by
+      calc (x⁻¹ * ((x * h) * x⁻¹)) * x
+        _ = ((x⁻¹ * (x * h)) * x⁻¹) * x := by rw [← Grupo.oper_asociativa x⁻¹ (x * h) x⁻¹]
+        _ = (((x⁻¹ * x) * h) * x⁻¹) * x := by rw [← Grupo.oper_asociativa x⁻¹ x h]
+        _ = ((1 * h) * x⁻¹) * x := by rw [Grupo.oper_inv x]
+        _ = (h * x⁻¹) * x := by rw [Grupo.neutro_oper]
+        _ = h * (x⁻¹ * x) := by rw [Grupo.oper_asociativa]
+        _ = h * 1 := by rw [Grupo.oper_inv x]
+        _ = h := by rw [Grupo.oper_neutro]
+    rw [h_eq] at h4
+    exact h4
+
+
+-- La acción de H sobre las clases laterales izquierdas X = G/H por traslación
+instance accion_H_cociente {G : Type _} [Grupo G] (H : Subgrupo G) : AccionGrupo {x // H.filtro x} (Quotient (setoidDcha H)) where
+  rho h q := Quotient.liftOn q
+    (fun a => Quotient.mk (setoidDcha H) (h.val * a))
+    (by
+      intro a b hab
+      apply Quotient.sound
+      change H.filtro (((h.val * a)⁻¹) * (h.val * b))
+      have h_calc : ((h.val * a)⁻¹) * (h.val * b) = a⁻¹ * b := by
+        calc ((h.val * a)⁻¹) * (h.val * b)
+          _ = (a⁻¹ * h.val⁻¹) * (h.val * b) := by rw [Grupo.inv_compuesto]
+          _ = a⁻¹ * (h.val⁻¹ * (h.val * b)) := by rw [← Grupo.oper_asociativa]
+          _ = a⁻¹ * ((h.val⁻¹ * h.val) * b) := by rw [Grupo.oper_asociativa h.val⁻¹ h.val b]
+          _ = a⁻¹ * (1 * b) := by rw [Grupo.oper_inv]
+          _ = a⁻¹ * b := by rw [Grupo.neutro_oper]
+
+      rw [h_calc]
+      exact hab
+    )
+
+  accion_neutro := by
+    intro q
+    induction q using Quotient.ind
+    rename_i a -- Le damos un nombre a la variable que genera la inducción
+    apply Quotient.sound
+    change H.filtro ((1 * a)⁻¹ * a)
+    have h_calc : (1 * a)⁻¹ * a = 1 := by
+      calc (1 * a)⁻¹ * a = a⁻¹ * a := by rw [Grupo.neutro_oper]
+           _ = 1 := by rw [Grupo.oper_inv]
+    rw [h_calc]
+    exact H.neutro_sub
+
+  accion_comp := by
+    intro h1 h2 q
+    induction q using Quotient.ind
+    rename_i a
+    apply Quotient.sound
+    change H.filtro (((h1.val * h2.val) * a)⁻¹ * (h1.val * (h2.val * a)))
+    have h_calc : ((h1.val * h2.val) * a)⁻¹ * (h1.val * (h2.val * a)) = 1 := by
+      calc ((h1.val * h2.val) * a)⁻¹ * (h1.val * (h2.val * a))
+        _ = (a⁻¹ * (h1.val * h2.val)⁻¹) * (h1.val * (h2.val * a)) := by rw [Grupo.inv_compuesto]
+        _ = (a⁻¹ * (h2.val⁻¹ * h1.val⁻¹)) * (h1.val * (h2.val * a)) := by rw [Grupo.inv_compuesto]
+        _ = a⁻¹ * ((h2.val⁻¹ * h1.val⁻¹) * (h1.val * (h2.val * a))) := by rw [← Grupo.oper_asociativa]
+        _ = a⁻¹ * (h2.val⁻¹ * (h1.val⁻¹ * (h1.val * (h2.val * a)))) := by rw [← Grupo.oper_asociativa]
+        _ = a⁻¹ * (h2.val⁻¹ * ((h1.val⁻¹ * h1.val) * (h2.val * a))) := by rw [Grupo.oper_asociativa h1.val⁻¹ h1.val _]
+        _ = a⁻¹ * (h2.val⁻¹ * (1 * (h2.val * a))) := by rw [Grupo.oper_inv]
+        _ = a⁻¹ * (h2.val⁻¹ * (h2.val * a)) := by rw [Grupo.neutro_oper]
+        _ = a⁻¹ * ((h2.val⁻¹ * h2.val) * a) := by rw [← Grupo.oper_asociativa]
+        _ = a⁻¹ * (1 * a) := by rw [Grupo.oper_inv]
+        _ = a⁻¹ * a := by rw [Grupo.neutro_oper]
+        _ = 1 := by rw [Grupo.oper_inv]
+    rw [h_calc]
+    exact H.neutro_sub
+
+
+-- [N_G(H) : H] ≡ [G : H] (mod p)
+theorem indice_normalizador_congr_p {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (H : Subgrupo G) (h_pgrupo : EsPGrupo {x // H.filtro x} p) :
+    Fintype.card (Quotient (setoidDcha H)) ≡ Fintype.card {q : Quotient (setoidDcha H) // PuntosFijos (G := {x // H.filtro x}) q} [MOD p] := by
+  -- Aplicamos card_congr_puntos_fijos directamente a la acción que acabamos de definir
+  exact card_congr_puntos_fijos (G := {x // H.filtro x}) (X := Quotient (setoidDcha H)) p h_pgrupo
+
+
+--Definimos el Centro de un grupo Z(G)
+def Centro (G : Type _) [Grupo G] : Subgrupo G where
+  filtro z := ∀ g : G, z * g = g * z
+
+  neutro_sub := by
+    intro g
+    calc 1 * g = g := by rw [Grupo.neutro_oper]
+         _ = g * 1 := by rw [Grupo.oper_neutro]
+
+  oper_sub := by
+    intro x y hx hy g
+    calc (x * y) * g = x * (y * g) := by rw [← Grupo.oper_asociativa]
+         _ = x * (g * y) := by rw [hy g]
+         _ = (x * g) * y := by rw [Grupo.oper_asociativa]
+         _ = (g * x) * y := by rw [hx g]
+         _ = g * (x * y) := by rw [← Grupo.oper_asociativa]
+
+  inv_sub := by
+    intro x hx g
+    -- Usamos el teorema conmutan_inv
+    exact conmutan_inv (hx g)
+
+
+-- Definimos la acción de G sobre sí mismo por conjugación ρ(g, x) = gxg⁻¹
+local instance accion_conjugacion {G : Type _} [Grupo G] : AccionGrupo G G where
+  rho g x := (g * x) * g⁻¹
+
+  accion_neutro := by
+    intro x
+    calc (1 * x) * (1:G)⁻¹ = x * (1:G)⁻¹ := by rw [Grupo.neutro_oper]
+         _ = x * 1 := by rw [Grupo.inv_neutro]
+         _ = x := by rw [Grupo.oper_neutro]
+
+  accion_comp := by
+    intro g1 g2 x
+    calc ((g1 * g2) * x) * (g1 * g2)⁻¹
+      _ = ((g1 * g2) * x) * (g2⁻¹ * g1⁻¹) := by rw [Grupo.inv_compuesto]
+      _ = (g1 * (g2 * x)) * (g2⁻¹ * g1⁻¹) := by rw [← Grupo.oper_asociativa g1 g2 x]
+      _ = g1 * ((g2 * x) * (g2⁻¹ * g1⁻¹)) := by rw [← Grupo.oper_asociativa]
+      _ = g1 * (((g2 * x) * g2⁻¹) * g1⁻¹) := by rw [Grupo.oper_asociativa (g2*x) g2⁻¹ g1⁻¹]
+      _ = (g1 * ((g2 * x) * g2⁻¹)) * g1⁻¹ := by rw [Grupo.oper_asociativa]
+
+-- Los elementos fijos bajo conjugación (X0) son exactamente Z(G)
+theorem fijos_conjugacion_eq_centro {G : Type _} [Grupo G] (x : G) : PuntosFijos (G := G) (X := G) x ↔ (Centro G).filtro x := by
+  -- gxg⁻¹ = x ↔ gx = xg
+  constructor
+  · intro h g
+    have h1 := h g -- (g * x) * g⁻¹ = x
+    change (g * x) * g⁻¹ = x at h1
+    calc x * g = ((g * x) * g⁻¹) * g := by rw [h1]
+         _ = (g * x) * (g⁻¹ * g) := by rw [← Grupo.oper_asociativa]
+         _ = (g * x) * 1 := by rw [Grupo.oper_inv]
+         _ = g * x := by rw [Grupo.oper_neutro]
+  · intro h g
+    have h1 := h g -- x * g = g * x
+    calc (g * x) * g⁻¹ = (x * g) * g⁻¹ := by rw [h1]
+         _ = x * (g * g⁻¹) := by rw [← Grupo.oper_asociativa]
+         _ = x * 1 := by rw [Grupo.inv_oper]
+         _ = x := by rw [Grupo.oper_neutro]
+
+
+
+
+-- Si G es un p-grupo, |Z(G)| > 1
+theorem centro_p_grupo_mayor_uno {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (h_pgrupo : EsPGrupo G p) [Fintype {x : G // PuntosFijos (G := G) (X := G) x}]
+  [Fintype (Quotient (setoidOrbita (G := G) (X := G)))] [Fintype {z : G // (Centro G).filtro z}] : Fintype.card {z : G // (Centro G).filtro z} > 1 := by
+
+  -- Usamos el teorema card_congr_puntos_fijos usando la acción de conjugación (X = G)
+  have h_card_ptfijos := card_congr_puntos_fijos (G := G) (X := G) p h_pgrupo
+
+  -- Relacionamos los puntos fijos X0 con el Centro Z(G)
+  have h_X0_centro : Fintype.card {x : G // PuntosFijos (G := G) (X := G) x} =
+                     Fintype.card {z : G // (Centro G).filtro z} := by
+    apply Fintype.card_congr
+    exact {
+      toFun := fun ⟨x, hx⟩ => ⟨x, (fijos_conjugacion_eq_centro x).mp hx⟩,
+      invFun := fun ⟨z, hz⟩ => ⟨z, (fijos_conjugacion_eq_centro z).mpr hz⟩,
+      left_inv := fun _ => Subtype.ext rfl,
+      right_inv := fun _ => Subtype.ext rfl
+    }
+
+  -- Sustituimos X0 por Z(G) en |G| ≡ |Z(G)| (mod p)
+  rw [h_X0_centro] at h_card_ptfijos
+
+  -- Como G es un p-grupo, |G| = p^m
+  -- Como m ≥ 1, |G| es un múltiplo de p, por tanto |G| ≡ 0 (mod p)
+  rcases h_pgrupo with ⟨hp_prime, m, hm_pos, hG_card⟩
+  have h_G_mod_p : Fintype.card G ≡ 0 [MOD p] := by
+    rw [orden_grupo] at hG_card
+    rw [hG_card]
+    -- Demostramos que p^m ≡ 0 [MOD p] viendo que p divide a p^m
+    apply Nat.modEq_zero_iff_dvd.mpr
+    -- Sabiendo que m > 0, lo dividimos en casos
+    cases m with
+    | zero =>
+      -- Caso imposible porque m > 0
+      omega
+    | succ k =>
+      -- Sabiendo que a | b significa ∃ c, b = a * c. Etonces  c = p^k
+      exists (p ^ k)
+      -- Ahora tenemos que demostrar p^(k+1) = p * p^k
+      -- pow_succ lo convierte a p^k * p, y mul_comm le da la vuelta
+      rw [Nat.pow_succ, mul_comm]
+
+  -- Si 0 ≡ |G| y |G| ≡ |Z(G)|, entonces 0 ≡ |Z(G)| (mod p)
+  have h_Z_mod_p : Fintype.card {z : G // (Centro G).filtro z} ≡ 0 [MOD p] := by
+    -- h_card_ptfijos : |G| ≡ |Z(G)|, por tanto h_card_ptfijos.symm : |Z(G)| ≡ |G|
+    -- h_G_mod_p : |G| ≡ 0
+    exact Nat.ModEq.trans h_card_ptfijos.symm h_G_mod_p
+
+  -- El centro siempre contiene al elemento neutro '1', luego su tamaño es al menos 1
+  have h_Z_pos : Fintype.card {z : G // (Centro G).filtro z} ≥ 1 := by
+    apply Fintype.card_pos_iff.mpr
+    exact ⟨⟨1, (Centro G).neutro_sub⟩⟩
+
+  -- Como p ∣ |Z(G)| y |Z(G)| ≥ 1, entonces |Z(G)| debe ser al menos p.
+  have hp_ge_2 : p ≥ 2 := hp_prime.two_le
+  have h_p_dvd_Z : p ∣ Fintype.card {z : G // (Centro G).filtro z} := Nat.modEq_zero_iff_dvd.mp h_Z_mod_p
+  have h_Z_ge_p : Fintype.card {z : G // (Centro G).filtro z} ≥ p := Nat.le_of_dvd h_Z_pos h_p_dvd_Z
+
+  exact Nat.lt_of_lt_of_le (by omega) h_Z_ge_p
