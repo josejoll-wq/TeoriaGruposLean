@@ -604,31 +604,22 @@ def ClaseIzq [Grupo G] (H : Subgrupo G) (a : G) : Set G :=
 
 open Classical
 
-/-- card(aH) = |H| -/
-theorem card_claseDcha_eq_card_H {G} [Grupo G] [Fintype G] (H : Subgrupo G) (a : G) :
-    Fintype.card (ClaseDcha H a) = Fintype.card {x // H.filtro x} := by
-  apply Fintype.card_congr
-  -- Construimos la biyección
-  exact {
-    -- f(x) = a⁻¹ * x. (Como x está en aH, a⁻¹*x ya está en H por definición)
-    toFun := fun x => ⟨(a⁻¹) * x.val, x.property⟩
-
-    -- f⁻¹(h) = a * h.
+/-- Cada clase lateral derecha es equivalente al subgrupo H -/
+def equiv_claseDcha {G} [Grupo G] (H : Subgrupo G) (a : G) :
+    ClaseDcha H a ≃ {x // H.filtro x} :=
+  { toFun := fun x => ⟨(a⁻¹) * x.val, x.property⟩
     invFun := fun h => ⟨a * h.val, by
       dsimp [RelDcha, ClaseDcha]
       rw [Grupo.oper_asociativa, Grupo.oper_inv, Grupo.neutro_oper]
       exact h.property⟩
+    left_inv := fun x => Subtype.ext (by dsimp; rw [Grupo.oper_asociativa, Grupo.inv_oper, Grupo.neutro_oper])
+    right_inv := fun h => Subtype.ext (by dsimp; rw [Grupo.oper_asociativa, Grupo.oper_inv, Grupo.neutro_oper]) }
 
-    --  f⁻¹(f(x)) = x  => a * (a⁻¹ * x) = x
-    left_inv := fun x => Subtype.ext (by
-      dsimp
-      rw [Grupo.oper_asociativa, Grupo.inv_oper, Grupo.neutro_oper])
+/-- card(aH) = |H| -/
+theorem card_claseDcha_eq_card_H {G} [Grupo G] [Fintype G] (H : Subgrupo G) (a : G) :
+    Fintype.card (ClaseDcha H a) = Fintype.card {x // H.filtro x} := by
+  exact Fintype.card_congr (equiv_claseDcha H a)
 
-    --  f(f⁻¹(h)) = h => a⁻¹ * (a * h) = h
-    right_inv := fun h => Subtype.ext (by
-      dsimp
-      rw [Grupo.oper_asociativa, Grupo.oper_inv, Grupo.neutro_oper])
-  }
 
 /- card(Ha) = |H| es de forma analoga -/
 theorem card_claseIzq_eq_card_H {G} [Grupo G] [Fintype G] (H : Subgrupo G) (a : G) :
@@ -710,21 +701,6 @@ noncomputable def indice {G} [Grupo G] [Fintype G] (H : Subgrupo G) : ℕ :=
   Fintype.card (Quotient (setoidIzq H))
 
 notation "[" G ":" H "]" => @indice G _ _ H
-
-
-
-/-- Cada clase lateral derecha es equivalente al subgrupo H -/
-def equiv_claseDcha {G} [Grupo G] (H : Subgrupo G) (a : G) :
-    ClaseDcha H a ≃ {x // H.filtro x} :=
-  { toFun := fun x => ⟨(a⁻¹) * x.val, x.property⟩
-    invFun := fun h => ⟨a * h.val, by
-      dsimp [RelDcha, ClaseDcha]
-      rw [Grupo.oper_asociativa, Grupo.oper_inv, Grupo.neutro_oper]
-      exact h.property⟩
-    left_inv := fun x => Subtype.ext (by dsimp; rw [Grupo.oper_asociativa, Grupo.inv_oper, Grupo.neutro_oper])
-    right_inv := fun h => Subtype.ext (by dsimp; rw [Grupo.oper_asociativa, Grupo.oper_inv, Grupo.neutro_oper]) }
-
-
 
 theorem lagrange {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) :
     orden_grupo G = Fintype.card {x : G // H.filtro x} * [G : H] := by
@@ -1362,11 +1338,6 @@ def rho_biyeccion (g : G) : X ≃ X where
          _ = rho (1:G) x := by rw [Grupo.inv_oper g]
          _ = x := accion_neutro x
 
-
-
-
--- Fijamos G y X para no reescribirlos constantemente
-variable {G X : Type _} [Grupo G] [AccionGrupo G X]
 
 -- Definimos f : G/I(x) → O_x
 def f_orbita (x : X) : Quotient (setoidDcha (Estabilizador (G := G) x)) → {y : X // Orbita (G := G) x y} :=
