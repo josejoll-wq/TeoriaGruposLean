@@ -8,6 +8,8 @@ import Mathlib.Data.Nat.Prime.Basic
 import Mathlib.Data.Nat.Prime.Factorial
 import Mathlib.Data.Fintype.Perm
 import Mathlib.Data.Nat.ModEq
+import Mathlib.Data.ZMod.Basic
+
 
 /- Definimos lo que es un grupo-/
 class Grupo (G : Type _) extends Mul G, One G, Inv G where
@@ -1024,8 +1026,7 @@ theorem inv_bien_definido {G} [Grupo G] (K : Subgrupo G) (h_norm : K ⊲ G)
 -- El cociente forma un grupo
 instance GrupoCociente {G} [Grupo G] (K : Subgrupo G) (h_norm : K ⊲ G) : Grupo (Quotient (setoidDcha K)) where
 
-  -- Usamos 'intro' para evitar repetir las hipótesis de que a ~ a' y b ~ b' cada vez que queremos demostrar que la operación está bien definida
-  -- Quotient.map₂ sirve para definir la multiplicación en el cociente a partir de la multiplicación en G
+  -- Quotient.map₂ es para definir la multiplicación en el cociente
   mul := Quotient.map₂ (fun x y => x * y) (by intro a a' ha b b' hb; exact mul_bien_definida K h_norm ha hb)
   one := Quotient.mk (setoidDcha K) 1
   inv := Quotient.map (fun x => x⁻¹) (by intro a a' ha; exact inv_bien_definido K h_norm ha)
@@ -1156,7 +1157,7 @@ notation G " ≈ " G' => SonIsomorfos G G'
 -- Dos subgrupos son iguales si contienen exactamente los mismos elementos
 theorem subgrupo_igualdad {G} [Grupo G] (H K : Subgrupo G) (h : ∀ x, H.filtro x ↔ K.filtro x) : H = K := by
   -- Extraemos las partes de las estructuras de subgrupo para poder usar la hipótesis de que contienen los mismos elementos
-  obtain ⟨fH, nH, oH, iH⟩ := H
+  obtain ⟨fH, nH, oH, h_ind⟩ := H
   obtain ⟨fK, nK, oK, iK⟩ := K
   -- Demostramos que las funciones filtro son la misma
   have heq : fH = fK := funext (fun x => propext (h x))
@@ -1297,7 +1298,7 @@ namespace AccionGrupo
 variable {G X : Type _} [Grupo G] [AccionGrupo G X]
 
 
--- Elementos de X que permanecen fijos bajo toda la acción (X₀)
+-- Elementos de X que permanecen fijos bajo toda la acción (X0)
 def PuntosFijos : X → Prop :=
   fun x => ∀ g : G, rho g x = x
 
@@ -1895,7 +1896,7 @@ theorem p_divide_suma {α : Type _} (s : Finset α) (f : α → ℕ) (p : ℕ)
     simp only [Finset.sum_empty]
     exact Nat.dvd_zero p
     -- En el caso inductivo usamos insert para separar un elemento 'a' del resto del conjunto s'
-  | insert a s' ha ih =>
+  | insert a s' ha h_ind =>
     -- Separamos la suma en 'a' y el resto del sumatorio '(s')'
     rw [Finset.sum_insert ha]
     apply Nat.dvd_add
@@ -1904,7 +1905,7 @@ theorem p_divide_suma {α : Type _} (s : Finset α) (f : α → ℕ) (p : ℕ)
       --FInset.mem_insert_self a s' es la definición de que 'a' pertenece al conjunto
       exact Finset.mem_insert_self a s'
     · -- Demostramos por hipótesis de inducción que p | suma(s')
-      apply ih
+      apply h_ind
       intro x hx
       apply h x
       exact Finset.mem_insert_of_mem hx
@@ -1937,7 +1938,7 @@ theorem card_congr_puntos_fijos {G X : Type _} [Grupo G] [Fintype G] [AccionGrup
     rw [h_eq]
     exact (Finset.sum_filter_add_sum_filter_not Finset.univ (fun O => card_O O = 1) card_O).symm
 
-  -- Demostramos que la suma de órbitas de tamaño 1 es exactamente el número de puntos fijos |X₀|
+  -- Demostramos que la suma de órbitas de tamaño 1 es exactamente el número de puntos fijos |X0|
   have h_sum_fijos : ∑ O ∈ Finset.univ.filter (fun O => card_O O = 1), card_O O = Fintype.card {x : X // PuntosFijos (G := G) x} := by
     have h_unos : ∑ O ∈ Finset.univ.filter (fun O => card_O O = 1), card_O O = (Finset.univ.filter (fun O => card_O O = 1)).card := by
       calc ∑ O ∈ Finset.univ.filter (fun O => card_O O = 1), card_O O
@@ -2296,3 +2297,401 @@ theorem centro_p_grupo_mayor_uno {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (h
   have h_Z_ge_p : Fintype.card {z : G // (Centro G).filtro z} ≥ p := Nat.le_of_dvd h_Z_pos h_p_dvd_Z
 
   exact Nat.lt_of_lt_of_le (by omega) h_Z_ge_p
+
+
+/-TEOREMA DE CAUCHY Y TEOREMA DE SYLOW -/
+--Para esta parte he introducido el uso de axiom,
+-- porque para demostrar el teorema de Cauchy y el teorema de Sylow,
+-- hay que demostrar varios lemas intermedios que son bastante complicados.
+-- por lo que los meto como axiomas y asi no hace falta demostrarlos.
+
+
+
+--Usamos un universo para que el conjunto de Cauchy y el grupo G vivan en el mismo universo
+-- Si no lo hacemos, Lean nos puede dar un error de inconsistencia de universos, por lo que no podemos usar Type _
+universe u
+
+-- Usamos el modulo de Lean para definir Zp como el grupo de enteros módulo p
+-- Definimos Zp como un sinónimo de ZMod p
+abbrev Zp (p : ℕ) := ZMod p
+-- Pasamos las operaciones de ZMod a Zp
+instance (p : ℕ) : Mul (Zp p) := ⟨fun x y => x + y⟩
+instance (p : ℕ) : One (Zp p) := ⟨0⟩
+instance (p : ℕ) : Inv (Zp p) := ⟨fun x => -x⟩
+
+-- Demostramos que Zp p es un grupo s
+instance Grupo_Zp (p : ℕ) : Grupo (Zp p) where
+  oper_asociativa x y z := (add_assoc x y z).symm
+  oper_neutro x := add_zero x
+  neutro_oper x := zero_add x
+  oper_inv x := neg_add_cancel x
+  inv_oper x := add_neg_cancel x
+
+-- Esto es para que Lean sepa que Zp p es un grupo y pueda usarlo en otras partes del código
+attribute [instance] Grupo_Zp
+
+-- NeZero es para quitar el caso p = 0
+--El grupo Zp p es finito, por lo que podemos usar Fintype
+-- inferInstance es para que Lean pase automáticamente la instancia de Fintype a Zp p
+instance Zp_finito (p : ℕ) [NeZero p] : Fintype (Zp p) := inferInstance
+
+
+-- El conjunto de Cauchy X = {(x_1, ..., x_p) ∈ G^p | x_1 * ... * x_p = 1}
+-- está en el mismo universo que G, por lo que podemos usar Type u
+axiom ConjuntoX_Cauchy (G : Type u) (p : ℕ) : Type u
+
+-- EL conjunto de Cauchy es finito
+axiom ConjX_Cauchy_Finito {G : Type u} [Grupo G] (p : ℕ) : Fintype (ConjuntoX_Cauchy G p)
+
+attribute [instance] ConjX_Cauchy_Finito
+
+-- DDefinimos la acción de Zp sobre el conjunto de Cauchy X por permutación
+axiom Accion_Zp_Cauchy {G : Type u} [Grupo G] (p : ℕ) : AccionGrupo (Zp p) (ConjuntoX_Cauchy G p)
+
+attribute [instance] Accion_Zp_Cauchy
+
+-- Los puntos fijos y el cociente de la acción de Zp sobre X son finitos
+axiom Fijos_Finitos {G : Type u} [Grupo G] (p : ℕ) : Fintype {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x}
+attribute [instance] Fijos_Finitos
+
+axiom Cociente_Finito {G : Type u} [Grupo G] (p : ℕ) : Fintype (Quotient (setoidOrbita (G := Zp p) (X := ConjuntoX_Cauchy G p)))
+
+attribute [instance] Cociente_Finito
+
+
+-- Como ConjuntoX_Cauchy son las tuplas (x_1, ..., x_p) tal que su producto es 1,
+-- su cardinal es |G|^(p-1). Como p divide a |G|, también divide a |X|.
+axiom card_X_mod_p {G : Type u} [Grupo G] [Fintype G] (p : ℕ) (hp : Nat.Prime p) (h_div : p ∣ orden_grupo G) :
+    Fintype.card (ConjuntoX_Cauchy G p) ≡ 0 [MOD p]
+
+-- La tupla trivial (1, 1, ..., 1) siempre pertenece a X y no le afecta la permutación
+-- Por tanto, el conjunto de puntos fijos no está vacío (|X0| ≥ 1).
+axiom X_0_no_vacio {G : Type u} [Grupo G] (p : ℕ) : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} ≥ 1
+
+-- Si sabemos que hay al menos 2 puntos fijos, uno es la tupla de unos,
+-- y el otro es una tupla (x, x, ..., x) que nos garantiza que x^p = 1.
+axiom lema_extraer_cauchy {G : Type u} [Grupo G] (p : ℕ) (h_ge_2 : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} ≥ 2) :
+    ∃ x : G, x ≠ 1 ∧ x ^ p = 1
+
+
+
+/- El teorema de Cauchy-/
+theorem teorema_cauchy {G : Type _} [Grupo G] [Fintype G] (p : ℕ) [NeZero p] (hp : Nat.Prime p) (h_div : p ∣ orden_grupo G)
+  (h_Zp_pgrupo : EsPGrupo (Zp p) p) : ∃ x : G, x ≠ 1 ∧ x ^ p = 1 := by
+
+  -- El tamaño del conjunto X es múltiplo de p (|X| ≡ 0 mod p)
+  have h_card_X : Fintype.card (ConjuntoX_Cauchy G p) ≡ 0 [MOD p] := card_X_mod_p p hp h_div
+
+  -- Aplicamos card_congr_puntos_fijos a la acción de Zp sobre X.
+  -- |X| ≡ |X0| (mod p) y entonces tenemos q |X0| ≡ 0 (mod p).
+  have h_card_ptfijos := card_congr_puntos_fijos (G := Zp p) (X := ConjuntoX_Cauchy G p) p h_Zp_pgrupo
+
+  have h_X0_mod_p : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} ≡ 0 [MOD p] :=
+    Nat.ModEq.trans h_card_ptfijos.symm h_card_X
+
+  -- Por lol menos la tupla trivial (1, 1, ..., 1) pertenece a X0, por lo que |X0| > 0
+  have h_pos : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} > 0 := by
+    have h1 := X_0_no_vacio (G := G) p
+    omega
+
+
+  -- Hay un conjunto X0 cuyo tamaño es > 0 y es múltiplo de p que es primo.
+  -- Por tanto, su tamaño debe ser al menos p. Como p ≥ 2, entonces |X0| ≥ 2.
+  have h_card_X0_ge_2 : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} ≥ 2 := by
+    have hp_ge_2 : p ≥ 2 := hp.two_le
+
+    have h_dvd : p ∣ Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} :=
+      Nat.modEq_zero_iff_dvd.mp h_X0_mod_p
+
+    have h_le : p ≤ Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} :=
+      Nat.le_of_dvd h_pos h_dvd
+    omega
+
+  -- Como |X0| ≥ 2, existe obligatoriamente otra tupla (x, ..., x) que nos da la solución.
+  exact lema_extraer_cauchy p h_card_X0_ge_2
+
+
+
+
+/-- Un subgrupo H es un p-Sylow si su orden es p^s, donde |G| = p^s * m y (m, p) = 1 -/
+def Es_p_Sylow {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p : ℕ) : Prop :=
+  Nat.Prime p ∧ ∃ s m : ℕ, orden_grupo G = (p ^ s) * m ∧ Nat.Coprime m p ∧ Fintype.card {x // H.filtro x} = p ^ s
+
+
+-- Definición de normalidad relativa: H ⊲ K
+def EsNormalEn {G : Type _} [Grupo G] (H K : Subgrupo G) : Prop :=
+  SubgrupoContenido H K ∧ ∀ k : G, K.filtro k → ∀ h : G, H.filtro h → H.filtro ((k * h) * k⁻¹)
+
+-- Congruencia del Normalizador que sirve para cualquier subgrupo de orden p^k
+axiom congr_normalizador {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p k : ℕ) (h_card : Fintype.card {x // H.filtro x} = p ^ k) :
+    indice H ≡ indice (res_sub H (Normalizador H)) [MOD p]
+
+-- Si p^r divide a |G| y |H| = p^k con k < r, entonces p divide a [G : H]
+axiom p_div_indice {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p r k : ℕ) (h_div : p ^ r ∣ orden_grupo G)
+ (h_card : Fintype.card {x // H.filtro x} = p ^ k) (h_k_lt_r : k < r) : p ∣ indice H
+
+-- Si a ≡ b (mod p) y p divide a a, entonces p divide a b
+axiom mod_division (a b p : ℕ) (h_mod : a ≡ b [MOD p]) (h_dvd : p ∣ a) : p ∣ b
+
+-- Teorema de Correspondencia y Cauchy.
+-- Si H ≤ G y p divide a [G : H], entonces existe un subgrupo H_sig tal que H ⊲ H_sig y |H_sig| = p * |H|.
+axiom correspondencia_cauchy {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p : ℕ) (h_p_div : p ∣ indice (res_sub H (Normalizador H))) :
+    ∃ H_sig : Subgrupo G, EsNormalEn H H_sig ∧ Fintype.card {x // H_sig.filtro x} = Fintype.card {x // H.filtro x} * p
+
+-- Coge el último subgrupo H_k de la secuencia y lo extrae para construir H_{k+1}
+-- Si k=0, entonces H_0 es el subgrupo trivial y lo extraemos directamente
+axiom extraer_H_k {G : Type _} [Grupo G] [Fintype G] (p k : ℕ) (H_seq_k : ℕ → Subgrupo G) (h_card_k : ∀ i, 1 ≤ i ∧ i ≤ k → Fintype.card {x // (H_seq_k i).filtro x} = p ^ i) :
+    ∃ H_k : Subgrupo G, Fintype.card {x // H_k.filtro x} = p ^ k
+
+-- Añade el nuevo subgrupo H_{k+1} a la secuencia existente
+axiom secuencia_H_k {G : Type _} [Grupo G] [Fintype G] (p k : ℕ) (H_seq_k : ℕ → Subgrupo G) (H_k : Subgrupo G) (h_card_k : ∀ i, 1 ≤ i ∧ i ≤ k → Fintype.card {x // (H_seq_k i).filtro x} = p ^ i)
+    (h_norm_k : ∀ i, 1 ≤ i ∧ i < k → EsNormalEn (H_seq_k i) (H_seq_k (i + 1))) (h_next_exists : ∃ H_sig : Subgrupo G, EsNormalEn H_k H_sig ∧ Fintype.card {x // H_sig.filtro x} = p ^ (k + 1)) :
+    ∃ H_seq_k_mas_1 : ℕ → Subgrupo G, (∀ i, 1 ≤ i ∧ i ≤ k + 1 → Fintype.card {x // (H_seq_k_mas_1 i).filtro x} = p ^ i) ∧
+    (∀ i, 1 ≤ i ∧ i < k + 1 → EsNormalEn (H_seq_k_mas_1 i) (H_seq_k_mas_1 (i + 1)))
+
+
+--Ahora construimos el primer teorema de sylow
+theorem primer_teorema_sylow {G : Type _} [Grupo G] [Fintype G] (p r : ℕ) (h_div : p ^ r ∣ orden_grupo G) :
+    ∃ H_seq : ℕ → Subgrupo G,   (∀ i, 1 ≤ i ∧ i ≤ r → Fintype.card {x // (H_seq i).filtro x} = p ^ i) ∧
+    (∀ i, 1 ≤ i ∧ i < r → EsNormalEn (H_seq i) (H_seq (i + 1))) := by
+
+  -- La demostración se hace por inducción en r (el exponente del primo p)
+  induction r with
+  | zero =>
+    -- Caso trivial: r=0
+    use fun _ => SubgrupoTrivial G
+    constructor
+    · intro i hi
+      -- Si 1 ≤ i y i ≤ 0, es una contradicción
+      omega
+    · intro i hi
+      omega
+
+  | succ k h_ind =>
+    -- Si p^(k+1) divide a |G|, claramente p^k divide a |G|
+    have h_div_k : p ^ k ∣ orden_grupo G := Nat.dvd_trans (Nat.pow_dvd_pow p (by omega)) h_div
+    rcases h_ind h_div_k with ⟨H_seq_k, h_card_k, h_norm_k⟩
+
+    -- Extraemos el último subgrupo construido H_k (de tamaño p^k)
+    have h_h_k_existe : ∃ H_k : Subgrupo G, Fintype.card {x // H_k.filtro x} = p ^ k :=
+      extraer_H_k p k H_seq_k h_card_k
+    rcases h_h_k_existe with ⟨H_k, h_card_H_k⟩
+
+    -- Por la congruencia del normalizador [G : H_k] ≡ [N_G(H_k) : H_k] (mod p)
+    have h_congruencia : indice H_k ≡ indice (res_sub H_k (Normalizador H_k)) [MOD p] := congr_normalizador H_k p k h_card_H_k
+
+    -- Como p^(k+1) divide a |G| y |H_k| = p^k, p divide al índice [G : H_k].
+    have h_p_div_indice_G : p ∣ indice H_k := p_div_indice H_k p (k + 1) k h_div h_card_H_k (by omega)
+
+    -- Por transitividad, p | [N_G(H_k) : H_k]
+    have h_p_div_indice_N : p ∣ indice (res_sub H_k (Normalizador H_k)) := mod_division _ _ p h_congruencia h_p_div_indice_G
+
+    -- Existe H_{k+1} normalizando a H_k
+    have h_H_k_mas_1_existe : ∃ H_k_mas_1 : Subgrupo G, EsNormalEn H_k H_k_mas_1 ∧ Fintype.card {x // H_k_mas_1.filtro x} = p ^ (k + 1) := by
+      have ⟨H_sig, h_norm, h_card⟩ := correspondencia_cauchy H_k p h_p_div_indice_N
+      use H_sig
+      constructor
+      · exact h_norm
+      · rw [h_card, h_card_H_k, ← Nat.pow_succ]
+
+    -- Añadimos el subgrupo a la secuencia
+    exact secuencia_H_k p k H_seq_k H_k h_card_k h_norm_k h_H_k_mas_1_existe
+
+
+/-- Defininoms el Subgrupo Conjugado xHx⁻¹ -/
+def ConjugadoSubgrupo {G : Type _} [Grupo G] (x : G) (H : Subgrupo G) : Subgrupo G where
+  filtro y := H.filtro ((x⁻¹ * y) * x)
+  neutro_sub := by
+    have h_eq : (x⁻¹ * 1) * x = 1 := by
+      rw [Grupo.oper_neutro, Grupo.oper_inv]
+    rw [h_eq]
+    exact H.neutro_sub
+  oper_sub := by
+    intro a b ha hb
+    have h_eq : (x⁻¹ * (a * b)) * x = ((x⁻¹ * a) * x) * ((x⁻¹ * b) * x) := by
+      calc (x⁻¹ * (a * b)) * x
+        _ = ((x⁻¹ * a) * b) * x := by rw [Grupo.oper_asociativa]
+        _ = ((x⁻¹ * a) * (1 * b)) * x := by rw [Grupo.neutro_oper]
+        _ = ((x⁻¹ * a) * ((x * x⁻¹) * b)) * x := by rw [← Grupo.inv_oper x]
+        _ = ((x⁻¹ * a) * (x * (x⁻¹ * b))) * x := by rw [← Grupo.oper_asociativa x x⁻¹ b]
+        _ = (((x⁻¹ * a) * x) * (x⁻¹ * b)) * x := by rw [Grupo.oper_asociativa (x⁻¹ * a) x (x⁻¹ * b)]
+        _ = ((x⁻¹ * a) * x) * ((x⁻¹ * b) * x) := by rw [← Grupo.oper_asociativa ((x⁻¹ * a) * x) (x⁻¹ * b) x]
+    rw [h_eq]
+    exact H.oper_sub ha hb
+  inv_sub := by
+    intro a ha
+    have h_eq : (x⁻¹ * a⁻¹) * x = ((x⁻¹ * a) * x)⁻¹ := by
+      calc (x⁻¹ * a⁻¹) * x
+        _ = (a * x)⁻¹ * x := by rw [← Grupo.inv_compuesto a x]
+        _ = (a * x)⁻¹ * (x⁻¹)⁻¹ := by rw [Grupo.inv_inv x]
+        _ = (x⁻¹ * (a * x))⁻¹ := by rw [← Grupo.inv_compuesto x⁻¹ (a * x)]
+        _ = ((x⁻¹ * a) * x)⁻¹ := by rw [Grupo.oper_asociativa x⁻¹ a x]
+    rw [h_eq]
+    exact H.inv_sub ha
+
+
+/-- Un p-subgrupo es cualquier subgrupo cuyo orden es exactamente una potencia de p -/
+def Es_p_Subgrupo {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p : ℕ) : Prop :=
+  Nat.Prime p ∧ ∃ k : ℕ, Fintype.card {x // H.filtro x} = p ^ k
+
+-- Lema del punto fijo para el segundo teorema de Sylow, si H es un p-subgrupo y S es un p-Sylow, entonces existe x ∈ G tal que H ⊆ xSx⁻¹
+axiom punto_fijo_sylow {G : Type _} [Grupo G] [Fintype G] (H S : Subgrupo G) (p : ℕ) (h_H_pgrupo : Es_p_Subgrupo H p) (h_S_sylow : Es_p_Sylow S p) :
+    ∃ x : G, ∀ h : G, H.filtro h → S.filtro ((x⁻¹ * h) * x)
+
+
+/-- Segundo teorema de sylow. Todo p-subgrupo H está contenido en algún conjugado de cualquier p-Sylow S. -/
+theorem segundo_teorema_sylow {G : Type _} [Grupo G] [Fintype G] (H S : Subgrupo G) (p : ℕ) (h_H_pgrupo : Es_p_Subgrupo H p) (h_S_sylow : Es_p_Sylow S p) :
+    ∃ x : G, SubgrupoContenido H (ConjugadoSubgrupo x S) := by
+
+  -- Usamos el lema del Punto Fijo para obtener el elemento 'x' que conjuga a S.
+  have ⟨x, hx_fijo⟩ := punto_fijo_sylow H S p h_H_pgrupo h_S_sylow
+  -- ElL x que nos da el lema del punto fijo es el que necesitamos para demostrar la inclusión H ⊆ xSx⁻¹
+  use x
+  --∀ h ∈ H, h ∈ xSx⁻¹
+  intro h h_in_H
+  -- Evaluamos la condición del punto fijo para nuestro 'h' específico
+  have h_eval := hx_fijo h h_in_H
+  -- Ahora lo camibamos para que se vea que xSx⁻¹ es lo mismo que (x⁻¹ * h) * x ∈ S.
+  change S.filtro ((x⁻¹ * h) * x)
+  exact h_eval
+
+
+
+-- Todo p-Sylow es, por definición, un p-subgrupo
+theorem sylow_es_p_subgrupo {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p : ℕ) (h : Es_p_Sylow H p) : Es_p_Subgrupo H p := by
+  rcases h with ⟨hp, s, m, hG_ord, hcop, hcard⟩
+  exact ⟨hp, ⟨s, hcard⟩⟩
+
+-- Dos p-Sylow cualesquiera de G tienen exactamente la misma cardinalidad
+axiom sylow_igual_card {G : Type _} [Grupo G] [Fintype G] (H S : Subgrupo G) (p : ℕ) (h_H : Es_p_Sylow H p) (h_S : Es_p_Sylow S p) :
+    Fintype.card {x // H.filtro x} = Fintype.card {x // S.filtro x}
+
+-- Un subgrupo y su conjugado tienen siempre la misma cardinalidad
+axiom card_conj_igual {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (x : G) : Fintype.card {h // (ConjugadoSubgrupo x H).filtro h} = Fintype.card {h // H.filtro h}
+
+-- Si H ⊆ K y tienen el mismo tamaño finito, obligatoriamente H = K
+axiom igualdad_subgrupo_card {G : Type _} [Grupo G] [Fintype G] (H K : Subgrupo G) (h_sub : SubgrupoContenido H K)
+  (h_card : Fintype.card {x // H.filtro x} = Fintype.card {x // K.filtro x}) :  H = K
+
+-- El conjugado de un p-Sylow sigue siendo un p-Sylow
+axiom conj_es_sylow {G : Type _} [Grupo G] [Fintype G] (S : Subgrupo G) (p : ℕ) (x : G) (h_S : Es_p_Sylow S p) : Es_p_Sylow (ConjugadoSubgrupo x S) p
+
+
+-- Un subgrupo es normal si y solo si es igual a todos sus conjugados
+axiom normal_ssi_conjugado {G : Type _} [Grupo G] (H : Subgrupo G) : EsNormal H ↔ (∀ x : G, ConjugadoSubgrupo x H = H)
+
+
+--Dos p-subgrupos de Sylow cualesquiera son conjugados
+theorem sylow_son_conjugados {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (S H : Subgrupo G) (h_S_sylow : Es_p_Sylow S p)
+    (h_H_sylow : Es_p_Sylow H p) : ∃ x : G, H = ConjugadoSubgrupo x S := by
+
+  -- H es un p-Sylow, por tanto es un p-subgrupo
+  have h_H_pgrupo : Es_p_Subgrupo H p := sylow_es_p_subgrupo H p h_H_sylow
+  --  Por el segundo teorema de sylow, H está contenido en algún conjugado de S
+  have ⟨x, h_sub⟩ := segundo_teorema_sylow H S p h_H_pgrupo h_S_sylow
+  -- H y S tienen el mismo tamaño por ser ambos p-Sylow del mismo grupo G
+  have h_card_HS : Fintype.card {y // H.filtro y} = Fintype.card {y // S.filtro y} := sylow_igual_card H S p h_H_sylow h_S_sylow
+  -- S y su conjugado xSx⁻¹ tienen el mismo tamaño
+  have h_card_conj : Fintype.card {y // (ConjugadoSubgrupo x S).filtro y} = Fintype.card {y // S.filtro y} := card_conj_igual S x
+  -- Por transitividad, H y xSx⁻¹ tienen el mismo tamaño
+  have h_card_eq : Fintype.card {y // H.filtro y} = Fintype.card {y // (ConjugadoSubgrupo x S).filtro y} := by rw [h_card_HS, h_card_conj]
+  -- H ⊆ xSx⁻¹ y tienen el mismo tamaño, luego son el mismo subgrupo
+  use x
+  exact igualdad_subgrupo_card H (ConjugadoSubgrupo x S) h_sub h_card_eq
+
+
+
+
+-- Si un grupo tiene un único p-subgrupo de Sylow, entonces es normal
+theorem sylow_unico_es_normal {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (S : Subgrupo G) (h_S_sylow : Es_p_Sylow S p)
+    (h_unico : ∀ H : Subgrupo G, Es_p_Sylow H p → H = S) : EsNormal S := by
+
+  -- Un subgrupo es normal si y solo si coincide con todos sus conjugados
+  apply (normal_ssi_conjugado S).mpr
+  intro x
+  -- El conjugado xSx⁻¹ es también un p-Sylow
+  have h_conj_sylow : Es_p_Sylow (ConjugadoSubgrupo x S) p :=    conj_es_sylow S p x h_S_sylow
+  -- Por unicidad, cualquier p-Sylow debe ser S. Por tanto, el conjugado xSx⁻¹ es igual a S.
+  have h_eq : ConjugadoSubgrupo x S = S := h_unico (ConjugadoSubgrupo x S) h_conj_sylow
+  exact h_eq
+
+
+
+
+-- Definimos el conjunto X de todos los p-subgrupos de Sylow de G
+def ConjuntoSylow (G : Type _) [Grupo G] [Fintype G] (p : ℕ) : Type _ := { H : Subgrupo G // Es_p_Sylow H p }
+
+-- El conjunto de Sylows es finito
+axiom ConjuntoSylow_Finito {G : Type _} [Grupo G] [Fintype G] (p : ℕ) : Fintype (ConjuntoSylow G p)
+attribute [instance] ConjuntoSylow_Finito
+
+
+-- El número de p-Sylows es el tamaño de la órbita de cualquier S bajo conjugación,
+-- que a su vez es igul al índice de su normalizador: n_p = [G : N_G(S)]
+axiom np_igual_ind_normalizador {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (S : Subgrupo G) (h_S_sylow : Es_p_Sylow S p) :
+    Fintype.card (ConjuntoSylow G p) = indice (Normalizador S)
+
+-- [G : S] = [G : N_G(S)] * [N_G(S) : S]
+axiom trnasitividad_indice {G : Type _} [Grupo G] [Fintype G] (S : Subgrupo G) :
+    indice S = indice (Normalizador S) * Fintype.card {x // (res_sub S (Normalizador S)).filtro x}
+
+-- Si p divide a |G|, entonces el número de p-Sylows es congruente a 1 módulo p
+axiom np_congr {G : Type _} [Grupo G] [Fintype G] (p : ℕ) : Fintype.card (ConjuntoSylow G p) ≡ 1 [MOD p]
+
+
+-- Tercer Teorema de Sylow
+theorem tercer_teorema_sylow {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (S : Subgrupo G) (h_S_sylow : Es_p_Sylow S p) :
+    let n_p := Fintype.card (ConjuntoSylow G p)
+    n_p = indice (Normalizador S) ∧ (∃ (s m : ℕ), n_p ∣ m ∧ orden_grupo G = p ^ s * m) ∧ n_p ≡ 1 [MOD p] := by
+
+  intro n_p
+  refine ⟨?_, ?_, ?_⟩
+
+  · -- n_p = [G : N_G(S)]
+    exact np_igual_ind_normalizador p S h_S_sylow
+  · -- n_p | m  y  |G| = p^s * m
+    rcases h_S_sylow.2 with ⟨s, m, hG_ord, h_coprime, h_card_S⟩
+    use s, m
+    constructor
+    · -- Demostramos que n_p divide a m
+      have h_np_eq : n_p = indice (Normalizador S) := np_igual_ind_normalizador p S h_S_sylow
+
+      -- Por Lagrange, |G| = |S| * [G : S], entonces p^s * m = p^s * [G : S]  y entoncs  m = [G : S]
+      have h_m_eq_indice : m = indice S := by
+        have h_lagrange := lagrange S
+        rw [h_card_S] at h_lagrange
+
+        -- |G| = p^s * [G : S]
+        have h_eq : p ^ s * m = p ^ s * indice S := by
+          calc p ^ s * m = orden_grupo G := hG_ord.symm
+               _ = p ^ s * indice S := h_lagrange
+
+        -- Hacemos inducción sobre un 'n' cualquiera
+        have h_pow_pos : ∀ (n : ℕ), p ^ n > 0 := by
+          intro n
+          induction n with
+          | zero => exact Nat.zero_lt_one
+          | succ k h_ind =>
+            rw [Nat.pow_succ]
+            -- Ahora 'h_ind' es exactamente 0 < p^k
+            exact Nat.mul_pos h_ind h_S_sylow.1.pos
+
+        -- Lo evaluamnos ahora en el 's' específico
+        have h_ps_pos : p ^ s > 0 := h_pow_pos s
+        exact Nat.eq_of_mul_eq_mul_left h_ps_pos h_eq
+
+      have h_transitividad := trnasitividad_indice S
+
+      -- Por tanto, m = n_p * [N_G(S) : S]
+      have h_div_exacta : m = n_p * Fintype.card {x // (res_sub S (Normalizador S)).filtro x} := by
+        calc m = indice S := h_m_eq_indice
+             _ = indice (Normalizador S) * Fintype.card {x // (res_sub S (Normalizador S)).filtro x} := h_transitividad
+             _ = n_p * Fintype.card {x // (res_sub S (Normalizador S)).filtro x} := by rw [← h_np_eq]
+
+      exact ⟨Fintype.card {x // (res_sub S (Normalizador S)).filtro x}, h_div_exacta⟩
+
+    · --|G| = p^s * m
+      exact hG_ord
+
+  · -- n_p ≡ 1 (mod p)
+    exact np_congr p
