@@ -2300,11 +2300,10 @@ theorem centro_p_grupo_mayor_uno {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (h
 
 
 /-TEOREMA DE CAUCHY Y TEOREMA DE SYLOW -/
---Para esta parte he introducido el uso de axiom,
+--Para esta parte he introducido el uso de sorry,
 -- porque para demostrar el teorema de Cauchy y el teorema de Sylow,
 -- hay que demostrar varios lemas intermedios que son bastante complicados.
--- por lo que los meto como axiomas y asi no hace falta demostrarlos.
-
+-- por lo que decido asumir los teoremas auxiliares y no completar sus demostaciones.
 
 
 --Usamos un universo para que el conjunto de Cauchy y el grupo G vivan en el mismo universo
@@ -2338,40 +2337,40 @@ instance Zp_finito (p : ℕ) [NeZero p] : Fintype (Zp p) := inferInstance
 
 -- El conjunto de Cauchy X = {(x_1, ..., x_p) ∈ G^p | x_1 * ... * x_p = 1}
 -- está en el mismo universo que G, por lo que podemos usar Type u
-axiom ConjuntoX_Cauchy (G : Type u) (p : ℕ) : Type u
+def ConjuntoX_Cauchy (G : Type u) (p : ℕ) : Type u := sorry
 
 -- EL conjunto de Cauchy es finito
-axiom ConjX_Cauchy_Finito {G : Type u} [Grupo G] (p : ℕ) : Fintype (ConjuntoX_Cauchy G p)
+instance ConjX_Cauchy_Finito {G : Type u} [Grupo G] (p : ℕ) : Fintype (ConjuntoX_Cauchy G p) := sorry
 
 attribute [instance] ConjX_Cauchy_Finito
 
 -- DDefinimos la acción de Zp sobre el conjunto de Cauchy X por permutación
-axiom Accion_Zp_Cauchy {G : Type u} [Grupo G] (p : ℕ) : AccionGrupo (Zp p) (ConjuntoX_Cauchy G p)
+instance Accion_Zp_Cauchy {G : Type u} [Grupo G] (p : ℕ) : AccionGrupo (Zp p) (ConjuntoX_Cauchy G p) := sorry
 
 attribute [instance] Accion_Zp_Cauchy
 
 -- Los puntos fijos y el cociente de la acción de Zp sobre X son finitos
-axiom Fijos_Finitos {G : Type u} [Grupo G] (p : ℕ) : Fintype {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x}
+instance Fijos_Finitos {G : Type u} [Grupo G] (p : ℕ) : Fintype {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} := sorry
 attribute [instance] Fijos_Finitos
 
-axiom Cociente_Finito {G : Type u} [Grupo G] (p : ℕ) : Fintype (Quotient (setoidOrbita (G := Zp p) (X := ConjuntoX_Cauchy G p)))
+instance Cociente_Finito {G : Type u} [Grupo G] (p : ℕ) : Fintype (Quotient (setoidOrbita (G := Zp p) (X := ConjuntoX_Cauchy G p))) := sorry
 
 attribute [instance] Cociente_Finito
 
 
 -- Como ConjuntoX_Cauchy son las tuplas (x_1, ..., x_p) tal que su producto es 1,
 -- su cardinal es |G|^(p-1). Como p divide a |G|, también divide a |X|.
-axiom card_X_mod_p {G : Type u} [Grupo G] [Fintype G] (p : ℕ) (hp : Nat.Prime p) (h_div : p ∣ orden_grupo G) :
-    Fintype.card (ConjuntoX_Cauchy G p) ≡ 0 [MOD p]
+theorem card_X_mod_p {G : Type u} [Grupo G] [Fintype G] (p : ℕ) (hp : Nat.Prime p) (h_div : p ∣ orden_grupo G) :
+    Fintype.card (ConjuntoX_Cauchy G p) ≡ 0 [MOD p] := sorry
 
 -- La tupla trivial (1, 1, ..., 1) siempre pertenece a X y no le afecta la permutación
 -- Por tanto, el conjunto de puntos fijos no está vacío (|X0| ≥ 1).
-axiom X_0_no_vacio {G : Type u} [Grupo G] (p : ℕ) : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} ≥ 1
+theorem X_0_no_vacio {G : Type u} [Grupo G] (p : ℕ) : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} ≥ 1 := sorry
 
 -- Si sabemos que hay al menos 2 puntos fijos, uno es la tupla de unos,
 -- y el otro es una tupla (x, x, ..., x) que nos garantiza que x^p = 1.
-axiom lema_extraer_cauchy {G : Type u} [Grupo G] (p : ℕ) (h_ge_2 : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} ≥ 2) :
-    ∃ x : G, x ≠ 1 ∧ x ^ p = 1
+theorem lema_extraer_cauchy {G : Type u} [Grupo G] (p : ℕ) (h_ge_2 : Fintype.card {x : ConjuntoX_Cauchy G p // PuntosFijos (G := Zp p) x} ≥ 2) :
+    ∃ x : G, x ≠ 1 ∧ x ^ p = 1 := sorry
 
 
 
@@ -2423,31 +2422,31 @@ def EsNormalEn {G : Type _} [Grupo G] (H K : Subgrupo G) : Prop :=
   SubgrupoContenido H K ∧ ∀ k : G, K.filtro k → ∀ h : G, H.filtro h → H.filtro ((k * h) * k⁻¹)
 
 -- Congruencia del Normalizador que sirve para cualquier subgrupo de orden p^k
-axiom congr_normalizador {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p k : ℕ) (h_card : Fintype.card {x // H.filtro x} = p ^ k) :
-    indice H ≡ indice (res_sub H (Normalizador H)) [MOD p]
+theorem congr_normalizador {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p k : ℕ) (h_card : Fintype.card {x // H.filtro x} = p ^ k) :
+    indice H ≡ indice (res_sub H (Normalizador H)) [MOD p] := sorry
 
 -- Si p^r divide a |G| y |H| = p^k con k < r, entonces p divide a [G : H]
-axiom p_div_indice {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p r k : ℕ) (h_div : p ^ r ∣ orden_grupo G)
- (h_card : Fintype.card {x // H.filtro x} = p ^ k) (h_k_lt_r : k < r) : p ∣ indice H
+theorem p_div_indice {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p r k : ℕ) (h_div : p ^ r ∣ orden_grupo G)
+ (h_card : Fintype.card {x // H.filtro x} = p ^ k) (h_k_lt_r : k < r) : p ∣ indice H := sorry
 
 -- Si a ≡ b (mod p) y p divide a a, entonces p divide a b
-axiom mod_division (a b p : ℕ) (h_mod : a ≡ b [MOD p]) (h_dvd : p ∣ a) : p ∣ b
+theorem mod_division (a b p : ℕ) (h_mod : a ≡ b [MOD p]) (h_dvd : p ∣ a) : p ∣ b := sorry
 
 -- Teorema de Correspondencia y Cauchy.
 -- Si H ≤ G y p divide a [G : H], entonces existe un subgrupo H_sig tal que H ⊲ H_sig y |H_sig| = p * |H|.
-axiom correspondencia_cauchy {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p : ℕ) (h_p_div : p ∣ indice (res_sub H (Normalizador H))) :
-    ∃ H_sig : Subgrupo G, EsNormalEn H H_sig ∧ Fintype.card {x // H_sig.filtro x} = Fintype.card {x // H.filtro x} * p
+theorem correspondencia_cauchy {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p : ℕ) (h_p_div : p ∣ indice (res_sub H (Normalizador H))) :
+    ∃ H_sig : Subgrupo G, EsNormalEn H H_sig ∧ Fintype.card {x // H_sig.filtro x} = Fintype.card {x // H.filtro x} * p := sorry
 
 -- Coge el último subgrupo H_k de la secuencia y lo extrae para construir H_{k+1}
 -- Si k=0, entonces H_0 es el subgrupo trivial y lo extraemos directamente
-axiom extraer_H_k {G : Type _} [Grupo G] [Fintype G] (p k : ℕ) (H_seq_k : ℕ → Subgrupo G) (h_card_k : ∀ i, 1 ≤ i ∧ i ≤ k → Fintype.card {x // (H_seq_k i).filtro x} = p ^ i) :
-    ∃ H_k : Subgrupo G, Fintype.card {x // H_k.filtro x} = p ^ k
+theorem extraer_H_k {G : Type _} [Grupo G] [Fintype G] (p k : ℕ) (H_seq_k : ℕ → Subgrupo G) (h_card_k : ∀ i, 1 ≤ i ∧ i ≤ k → Fintype.card {x // (H_seq_k i).filtro x} = p ^ i) :
+    ∃ H_k : Subgrupo G, Fintype.card {x // H_k.filtro x} = p ^ k := sorry
 
 -- Añade el nuevo subgrupo H_{k+1} a la secuencia existente
-axiom secuencia_H_k {G : Type _} [Grupo G] [Fintype G] (p k : ℕ) (H_seq_k : ℕ → Subgrupo G) (H_k : Subgrupo G) (h_card_k : ∀ i, 1 ≤ i ∧ i ≤ k → Fintype.card {x // (H_seq_k i).filtro x} = p ^ i)
+theorem secuencia_H_k {G : Type _} [Grupo G] [Fintype G] (p k : ℕ) (H_seq_k : ℕ → Subgrupo G) (H_k : Subgrupo G) (h_card_k : ∀ i, 1 ≤ i ∧ i ≤ k → Fintype.card {x // (H_seq_k i).filtro x} = p ^ i)
     (h_norm_k : ∀ i, 1 ≤ i ∧ i < k → EsNormalEn (H_seq_k i) (H_seq_k (i + 1))) (h_next_exists : ∃ H_sig : Subgrupo G, EsNormalEn H_k H_sig ∧ Fintype.card {x // H_sig.filtro x} = p ^ (k + 1)) :
     ∃ H_seq_k_mas_1 : ℕ → Subgrupo G, (∀ i, 1 ≤ i ∧ i ≤ k + 1 → Fintype.card {x // (H_seq_k_mas_1 i).filtro x} = p ^ i) ∧
-    (∀ i, 1 ≤ i ∧ i < k + 1 → EsNormalEn (H_seq_k_mas_1 i) (H_seq_k_mas_1 (i + 1)))
+    (∀ i, 1 ≤ i ∧ i < k + 1 → EsNormalEn (H_seq_k_mas_1 i) (H_seq_k_mas_1 (i + 1))) := sorry
 
 
 --Ahora construimos el primer teorema de sylow
@@ -2535,8 +2534,8 @@ def Es_p_Subgrupo {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (p : ℕ) 
   Nat.Prime p ∧ ∃ k : ℕ, Fintype.card {x // H.filtro x} = p ^ k
 
 -- Lema del punto fijo para el segundo teorema de Sylow, si H es un p-subgrupo y S es un p-Sylow, entonces existe x ∈ G tal que H ⊆ xSx⁻¹
-axiom punto_fijo_sylow {G : Type _} [Grupo G] [Fintype G] (H S : Subgrupo G) (p : ℕ) (h_H_pgrupo : Es_p_Subgrupo H p) (h_S_sylow : Es_p_Sylow S p) :
-    ∃ x : G, ∀ h : G, H.filtro h → S.filtro ((x⁻¹ * h) * x)
+theorem punto_fijo_sylow {G : Type _} [Grupo G] [Fintype G] (H S : Subgrupo G) (p : ℕ) (h_H_pgrupo : Es_p_Subgrupo H p) (h_S_sylow : Es_p_Sylow S p) :
+    ∃ x : G, ∀ h : G, H.filtro h → S.filtro ((x⁻¹ * h) * x) :=sorry
 
 
 /-- Segundo teorema de sylow. Todo p-subgrupo H está contenido en algún conjugado de cualquier p-Sylow S. -/
@@ -2563,22 +2562,22 @@ theorem sylow_es_p_subgrupo {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) 
   exact ⟨hp, ⟨s, hcard⟩⟩
 
 -- Dos p-Sylow cualesquiera de G tienen exactamente la misma cardinalidad
-axiom sylow_igual_card {G : Type _} [Grupo G] [Fintype G] (H S : Subgrupo G) (p : ℕ) (h_H : Es_p_Sylow H p) (h_S : Es_p_Sylow S p) :
-    Fintype.card {x // H.filtro x} = Fintype.card {x // S.filtro x}
+theorem sylow_igual_card {G : Type _} [Grupo G] [Fintype G] (H S : Subgrupo G) (p : ℕ) (h_H : Es_p_Sylow H p) (h_S : Es_p_Sylow S p) :
+    Fintype.card {x // H.filtro x} = Fintype.card {x // S.filtro x} := sorry
 
 -- Un subgrupo y su conjugado tienen siempre la misma cardinalidad
-axiom card_conj_igual {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (x : G) : Fintype.card {h // (ConjugadoSubgrupo x H).filtro h} = Fintype.card {h // H.filtro h}
+theorem card_conj_igual {G : Type _} [Grupo G] [Fintype G] (H : Subgrupo G) (x : G) : Fintype.card {h // (ConjugadoSubgrupo x H).filtro h} = Fintype.card {h // H.filtro h} := sorry
 
 -- Si H ⊆ K y tienen el mismo tamaño finito, obligatoriamente H = K
-axiom igualdad_subgrupo_card {G : Type _} [Grupo G] [Fintype G] (H K : Subgrupo G) (h_sub : SubgrupoContenido H K)
-  (h_card : Fintype.card {x // H.filtro x} = Fintype.card {x // K.filtro x}) :  H = K
+theorem igualdad_subgrupo_card {G : Type _} [Grupo G] [Fintype G] (H K : Subgrupo G) (h_sub : SubgrupoContenido H K)
+  (h_card : Fintype.card {x // H.filtro x} = Fintype.card {x // K.filtro x}) :  H = K := sorry
 
 -- El conjugado de un p-Sylow sigue siendo un p-Sylow
-axiom conj_es_sylow {G : Type _} [Grupo G] [Fintype G] (S : Subgrupo G) (p : ℕ) (x : G) (h_S : Es_p_Sylow S p) : Es_p_Sylow (ConjugadoSubgrupo x S) p
+theorem conj_es_sylow {G : Type _} [Grupo G] [Fintype G] (S : Subgrupo G) (p : ℕ) (x : G) (h_S : Es_p_Sylow S p) : Es_p_Sylow (ConjugadoSubgrupo x S) p := sorry
 
 
 -- Un subgrupo es normal si y solo si es igual a todos sus conjugados
-axiom normal_ssi_conjugado {G : Type _} [Grupo G] (H : Subgrupo G) : EsNormal H ↔ (∀ x : G, ConjugadoSubgrupo x H = H)
+theorem normal_ssi_conjugado {G : Type _} [Grupo G] (H : Subgrupo G) : EsNormal H ↔ (∀ x : G, ConjugadoSubgrupo x H = H) := sorry
 
 
 --Dos p-subgrupos de Sylow cualesquiera son conjugados
@@ -2622,21 +2621,21 @@ theorem sylow_unico_es_normal {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (S : 
 def ConjuntoSylow (G : Type _) [Grupo G] [Fintype G] (p : ℕ) : Type _ := { H : Subgrupo G // Es_p_Sylow H p }
 
 -- El conjunto de Sylows es finito
-axiom ConjuntoSylow_Finito {G : Type _} [Grupo G] [Fintype G] (p : ℕ) : Fintype (ConjuntoSylow G p)
+instance ConjuntoSylow_Finito {G : Type _} [Grupo G] [Fintype G] (p : ℕ) : Fintype (ConjuntoSylow G p) := sorry
 attribute [instance] ConjuntoSylow_Finito
 
 
 -- El número de p-Sylows es el tamaño de la órbita de cualquier S bajo conjugación,
 -- que a su vez es igul al índice de su normalizador: n_p = [G : N_G(S)]
-axiom np_igual_ind_normalizador {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (S : Subgrupo G) (h_S_sylow : Es_p_Sylow S p) :
-    Fintype.card (ConjuntoSylow G p) = indice (Normalizador S)
+theorem np_igual_ind_normalizador {G : Type _} [Grupo G] [Fintype G] (p : ℕ) (S : Subgrupo G) (h_S_sylow : Es_p_Sylow S p) :
+    Fintype.card (ConjuntoSylow G p) = indice (Normalizador S) := sorry
 
 -- [G : S] = [G : N_G(S)] * [N_G(S) : S]
-axiom trnasitividad_indice {G : Type _} [Grupo G] [Fintype G] (S : Subgrupo G) :
-    indice S = indice (Normalizador S) * Fintype.card {x // (res_sub S (Normalizador S)).filtro x}
+theorem trnasitividad_indice {G : Type _} [Grupo G] [Fintype G] (S : Subgrupo G) :
+    indice S = indice (Normalizador S) * Fintype.card {x // (res_sub S (Normalizador S)).filtro x} := sorry
 
 -- Si p divide a |G|, entonces el número de p-Sylows es congruente a 1 módulo p
-axiom np_congr {G : Type _} [Grupo G] [Fintype G] (p : ℕ) : Fintype.card (ConjuntoSylow G p) ≡ 1 [MOD p]
+theorem np_congr {G : Type _} [Grupo G] [Fintype G] (p : ℕ) : Fintype.card (ConjuntoSylow G p) ≡ 1 [MOD p] := sorry
 
 
 -- Tercer Teorema de Sylow
